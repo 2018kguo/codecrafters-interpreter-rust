@@ -1,7 +1,7 @@
+use anyhow::Result;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
-use anyhow::Result;
 mod scanner;
 
 fn main() -> Result<()> {

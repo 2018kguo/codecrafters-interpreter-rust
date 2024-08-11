@@ -114,6 +114,7 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: usize,
+    had_error: bool,
 }
 
 impl Scanner {
@@ -124,6 +125,7 @@ impl Scanner {
             start: 0,
             current: 0,
             line: 1,
+            had_error: false,
         }
     }
 
@@ -151,11 +153,28 @@ impl Scanner {
         self.current >= self.source.len()
     }
 
+    fn error(&mut self, line: usize, message: &str) {
+        self.report(line, "", message);
+    }
+
+    fn report(&mut self, line: usize, location: &str, message: &str) {
+        eprintln!("[line {}] Error {}: {}", line, location, message);
+        self.had_error = true;
+    }
+
     fn scan_token(&mut self) -> Result<()> {
         match self.advance() {
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
-            _ => panic!("Unexpected character"),
+            '{' => self.add_token(TokenType::LeftBrace),
+            '}' => self.add_token(TokenType::RightBrace),
+            ',' => self.add_token(TokenType::Comma),
+            '.' => self.add_token(TokenType::Dot),
+            '-' => self.add_token(TokenType::Minus),
+            '+' => self.add_token(TokenType::Plus),
+            ';' => self.add_token(TokenType::Semicolon),
+            '*' => self.add_token(TokenType::Star),
+            _ => self.error(self.line, "Unexpected character."),
         }
         Ok(())
     }
