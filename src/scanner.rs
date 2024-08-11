@@ -100,6 +100,17 @@ enum Literal {
     Nil,
 }
 
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Literal::Number(n) => write!(f, "{}", n),
+            Literal::String(s) => write!(f, "{}", s),
+            Literal::Boolean(b) => write!(f, "{}", b),
+            Literal::Nil => write!(f, "nil"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Token {
     token_type: TokenType,
@@ -153,7 +164,11 @@ impl Scanner {
 
     pub fn token_structure(&self) {
         for token in &self.tokens {
-            println!("{} {} null", token.token_type, token.lexeme);
+            let literal_string = match &token.literal {
+                Some(literal) => format!("{}", literal),
+                None => "null".to_string(),
+            };
+            println!("{} {} {}", token.token_type, token.lexeme, literal_string);
         }
     }
 
@@ -210,6 +225,7 @@ impl Scanner {
             }
             ' ' | '\r' | '\t' => {}
             '\n' => self.line += 1,
+            '"' => self.string(),
             c => self.error(self.line, &format!("Unexpected character: {}", c)),
         }
         Ok(())
@@ -255,8 +271,34 @@ impl Scanner {
         if self.is_at_end() {
             return '\0';
         }
-        //eprintln!("peeking at {}", self.current);
-        //eprintln!("source: {}, {}", self.source, self.source.len());
+        eprintln!("peeking at {}", self.current);
+        eprintln!("source: {}, {}", self.source, self.source.len());
         self.source.chars().nth(self.current).unwrap()
+    }
+
+    fn string(&mut self) {
+        while self.peek() != '"' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            self.error(self.line, "Unterminated string.");
+            return
+        }
+
+        // cover the closing "
+        self.advance();
+
+        // trim the surrounding quotes
+        let value: String = self
+            .source
+            .chars()
+            .skip(self.start + 1)
+            .take(self.current - self.start - 2)
+            .collect();
+        self.add_token_literal(TokenType::String, Some(Literal::String(value)));
     }
 }
