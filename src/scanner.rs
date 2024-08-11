@@ -117,6 +117,11 @@ pub struct Scanner {
     had_error: bool,
 }
 
+pub struct ScanResult {
+    pub tokens: Vec<Token>,
+    pub had_error: bool,
+}
+
 impl Scanner {
     pub fn new(source: String) -> Scanner {
         Scanner {
@@ -129,7 +134,7 @@ impl Scanner {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Result<Vec<Token>> {
+    pub fn scan_tokens(&mut self) -> Result<ScanResult> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token()?;
@@ -140,7 +145,10 @@ impl Scanner {
             literal: None,
             line: self.line,
         });
-        Ok(self.tokens.clone())
+        Ok(ScanResult {
+            tokens: self.tokens.clone(),
+            had_error: self.had_error,
+        })
     }
 
     pub fn token_structure(&self) {
@@ -158,7 +166,7 @@ impl Scanner {
     }
 
     fn report(&mut self, line: usize, location: &str, message: &str) {
-        eprintln!("[line {}] Error {}: {}", line, location, message);
+        eprintln!("[line {}] Error{}: {}", line, location, message);
         self.had_error = true;
     }
 
@@ -174,7 +182,7 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
-            _ => self.error(self.line, "Unexpected character."),
+            c => self.error(self.line, &format!("Unexpected character: {}", c)),
         }
         Ok(())
     }

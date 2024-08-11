@@ -2,6 +2,7 @@ use anyhow::Result;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::process::exit;
 mod scanner;
 
 fn main() -> Result<()> {
@@ -25,8 +26,11 @@ fn main() -> Result<()> {
             });
 
             let mut scanner = scanner::Scanner::new(file_contents);
-            scanner.scan_tokens()?;
+            let scan_result = scanner.scan_tokens()?;
             scanner.token_structure();
+            if scan_result.had_error {
+                exit(65);
+            }
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
