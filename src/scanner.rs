@@ -103,7 +103,13 @@ enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Literal::Number(n) => write!(f, "{}", n),
+            Literal::Number(n) => {
+                Display::fmt(n, f)?;
+                if (n % 1.0).abs() < f64::EPSILON {
+                    f.write_str(".0")?;
+                }
+                Ok(())
+            }
             Literal::String(s) => write!(f, "{}", s),
             Literal::Boolean(b) => write!(f, "{}", b),
             Literal::Nil => write!(f, "nil"),
@@ -226,7 +232,14 @@ impl Scanner {
             ' ' | '\r' | '\t' => {}
             '\n' => self.line += 1,
             '"' => self.string(),
-            c => self.error(self.line, &format!("Unexpected character: {}", c)),
+            c => {
+                if self.is_digit(c){
+                    self.number();
+                }
+                else {
+                    self.error(self.line, &format!("Unexpected character: {}", c))
+                }
+            },
         }
         Ok(())
     }
@@ -271,8 +284,8 @@ impl Scanner {
         if self.is_at_end() {
             return '\0';
         }
-        eprintln!("peeking at {}", self.current);
-        eprintln!("source: {}, {}", self.source, self.source.len());
+        //eprintln!("peeking at {}", self.current);
+        //eprintln!("source: {}, {}", self.source, self.source.len());
         self.source.chars().nth(self.current).unwrap()
     }
 
@@ -300,5 +313,36 @@ impl Scanner {
             .take(self.current - self.start - 2)
             .collect();
         self.add_token_literal(TokenType::String, Some(Literal::String(value)));
+    }
+
+    fn is_digit(&self, c: char) -> bool {
+        return c >= '0' && c <= '9';
+    }
+
+    fn number(&mut self) {
+        while self.is_digit(self.peek()) {
+            self.advance();
+        }
+
+        // look for a fractional part
+        if self.peek() == '.' && self.is_digit(self.peek_next()) {
+            // consume the "."
+            self.advance();
+
+            while self.is_digit(self.peek()) {
+                self.advance();
+            }
+        }
+
+        let value_string: String = self.source.chars().skip(self.start).take(self.current - self.start).collect();
+        let value: f64 = value_string.parse().unwrap();
+        self.add_token_literal(TokenType::Number, Some(Literal::Number(value)));
+    }
+
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.chars().count() {
+            return '\0';
+        }
+        self.source.chars().nth(self.current + 1).unwrap()
     }
 }
