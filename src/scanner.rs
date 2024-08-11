@@ -182,6 +182,22 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
+            '!' => match self.match_char('=') {
+                true => self.add_token(TokenType::BangEqual),
+                false => self.add_token(TokenType::Bang),
+            },
+            '=' => match self.match_char('=') {
+                true => self.add_token(TokenType::EqualEqual),
+                false => self.add_token(TokenType::Equal),
+            },
+            '<' => match self.match_char('=') {
+                true => self.add_token(TokenType::LessEqual),
+                false => self.add_token(TokenType::Less),
+            },
+            '>' => match self.match_char('=') {
+                true => self.add_token(TokenType::GreaterEqual),
+                false => self.add_token(TokenType::Greater),
+            },
             c => self.error(self.line, &format!("Unexpected character: {}", c)),
         }
         Ok(())
@@ -204,5 +220,17 @@ impl Scanner {
     fn advance(&mut self) -> char {
         self.current += 1;
         self.source.chars().nth(self.current - 1).unwrap()
+    }
+
+    fn match_char(&mut self, expected: char) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        if self.source.chars().nth(self.current).unwrap() != expected {
+            return false;
+        }
+
+        self.current += 1;
+        true
     }
 }
