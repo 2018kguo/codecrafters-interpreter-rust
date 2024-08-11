@@ -158,7 +158,7 @@ impl Scanner {
     }
 
     fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
+        self.current >= self.source.chars().count()
     }
 
     fn error(&mut self, line: usize, message: &str) {
@@ -198,6 +198,18 @@ impl Scanner {
                 true => self.add_token(TokenType::GreaterEqual),
                 false => self.add_token(TokenType::Greater),
             },
+            '/' => {
+                if self.match_char('/') {
+                    // comment goes until the end of the line
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::Slash);
+                }
+            }
+            ' ' | '\r' | '\t' => {}
+            '\n' => self.line += 1,
             c => self.error(self.line, &format!("Unexpected character: {}", c)),
         }
         Ok(())
@@ -208,7 +220,12 @@ impl Scanner {
     }
 
     fn add_token_literal(&mut self, token_type: TokenType, literal: Option<Literal>) {
-        let text = self.source[self.start..self.current].to_string();
+        let text = self
+            .source
+            .chars()
+            .skip(self.start)
+            .take(self.current - self.start)
+            .collect();
         self.tokens.push(Token {
             token_type,
             lexeme: text,
@@ -232,5 +249,14 @@ impl Scanner {
 
         self.current += 1;
         true
+    }
+
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            return '\0';
+        }
+        //eprintln!("peeking at {}", self.current);
+        //eprintln!("source: {}, {}", self.source, self.source.len());
+        self.source.chars().nth(self.current).unwrap()
     }
 }
