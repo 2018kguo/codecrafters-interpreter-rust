@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 use anyhow::Result;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
 #[derive(Debug, Clone)]
@@ -30,7 +32,7 @@ enum TokenType {
     Class,
     Else,
     False,
-    Fn,
+    Fun,
     For,
     If,
     Nil,
@@ -43,6 +45,29 @@ enum TokenType {
     Var,
     While,
     Eof,
+}
+
+lazy_static! {
+    static ref KEYWORDS: HashMap<&'static str, TokenType> = {
+        let mut m = HashMap::new();
+        m.insert("and", TokenType::And);
+        m.insert("class", TokenType::Class);
+        m.insert("else", TokenType::Else);
+        m.insert("false", TokenType::False);
+        m.insert("for", TokenType::For);
+        m.insert("fun", TokenType::Fun);
+        m.insert("if", TokenType::If);
+        m.insert("nil", TokenType::Nil);
+        m.insert("or", TokenType::Or);
+        m.insert("print", TokenType::Print);
+        m.insert("return", TokenType::Return);
+        m.insert("super", TokenType::Super);
+        m.insert("this", TokenType::This);
+        m.insert("true", TokenType::True);
+        m.insert("var", TokenType::Var);
+        m.insert("while", TokenType::While);
+        m
+    };
 }
 
 impl Display for TokenType {
@@ -74,7 +99,7 @@ impl Display for TokenType {
             TokenType::Class => "CLASS",
             TokenType::Else => "ELSE",
             TokenType::False => "FALSE",
-            TokenType::Fn => "FN",
+            TokenType::Fun => "FUN",
             TokenType::For => "FOR",
             TokenType::If => "IF",
             TokenType::Nil => "NIL",
@@ -233,13 +258,14 @@ impl Scanner {
             '\n' => self.line += 1,
             '"' => self.string(),
             c => {
-                if self.is_digit(c){
+                if self.is_digit(c) {
                     self.number();
-                }
-                else {
+                } else if self.is_alphanumeric(c) {
+                    self.identifier();
+                } else {
                     self.error(self.line, &format!("Unexpected character: {}", c))
                 }
-            },
+            }
         }
         Ok(())
     }
@@ -299,7 +325,7 @@ impl Scanner {
 
         if self.is_at_end() {
             self.error(self.line, "Unterminated string.");
-            return
+            return;
         }
 
         // cover the closing "
@@ -319,6 +345,14 @@ impl Scanner {
         return c >= '0' && c <= '9';
     }
 
+    fn is_alpha(&self, c: char) -> bool {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    }
+
+    fn is_alphanumeric(&self, c: char) -> bool {
+        return self.is_digit(c) || self.is_alpha(c);
+    }
+
     fn number(&mut self) {
         while self.is_digit(self.peek()) {
             self.advance();
@@ -334,7 +368,12 @@ impl Scanner {
             }
         }
 
-        let value_string: String = self.source.chars().skip(self.start).take(self.current - self.start).collect();
+        let value_string: String = self
+            .source
+            .chars()
+            .skip(self.start)
+            .take(self.current - self.start)
+            .collect();
         let value: f64 = value_string.parse().unwrap();
         self.add_token_literal(TokenType::Number, Some(Literal::Number(value)));
     }
@@ -344,5 +383,22 @@ impl Scanner {
             return '\0';
         }
         self.source.chars().nth(self.current + 1).unwrap()
+    }
+
+    fn identifier(&mut self) {
+        while self.is_alphanumeric(self.peek()) {
+            self.advance();
+        }
+
+        let text: String = self
+            .source
+            .chars()
+            .skip(self.start)
+            .take(self.current - self.start)
+            .collect();
+        let token_type = KEYWORDS
+            .get(&text.as_str())
+            .unwrap_or(&TokenType::Identifier);
+        self.add_token(token_type.clone());
     }
 }
