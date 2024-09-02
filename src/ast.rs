@@ -318,6 +318,16 @@ impl Visitor<Result<Literal>> for Interpreter {
     }
 }
 
+pub fn stringify_literal(literal: &Literal) -> String {
+    if matches!(literal, Literal::Number(_)) {
+        let string = format!("{}", literal);
+        if string.ends_with(".0") {
+            return string.replace(".0", "");
+        }
+    }
+    literal.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

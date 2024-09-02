@@ -2,6 +2,8 @@ use anyhow::Result;
 use std::env;
 use std::fs;
 use std::process::exit;
+
+use crate::ast::stringify_literal;
 mod ast;
 mod parser;
 mod scanner;
@@ -76,8 +78,8 @@ fn main() -> Result<()> {
             let result = interpreter.interpret(expression.unwrap());
 
             match result {
-                Ok(res) => {
-                    println!("{}", res);
+                Ok(result_literal) => {
+                    println!("{}", stringify_literal(&result_literal));
                 }
                 Err(err) => {
                     let runtime_error = err.downcast_ref::<ast::RuntimeError>().unwrap();
