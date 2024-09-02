@@ -230,13 +230,7 @@ impl Visitor<Result<Literal>> for Interpreter {
                     message: "Operand must be a number.".to_string(),
                 })),
             },
-            TokenType::Bang => match right {
-                Literal::Boolean(_b) => Ok(Literal::Boolean(!self.is_truthy(&right))),
-                _ => Err(anyhow::anyhow!(RuntimeError {
-                    token: unary.operator.clone(),
-                    message: "Operand must be a boolean.".to_string(),
-                })),
-            },
+            TokenType::Bang => Ok(Literal::Boolean(!self.is_truthy(&right))), 
             _ => Err(anyhow::anyhow!(RuntimeError {
                 token: unary.operator.clone(),
                 message: "Invalid unary operator.".to_string(),
