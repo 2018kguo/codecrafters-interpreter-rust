@@ -49,7 +49,7 @@ fn main() -> Result<()> {
             let mut parser = parser::Parser::new(scan_result.tokens);
             let expression = parser.parse();
 
-            if parser.had_error {
+            if parser.had_error || expression.is_err() {
                 exit(65);
             }
 

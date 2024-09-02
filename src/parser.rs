@@ -205,6 +205,7 @@ impl Parser {
             }));
         }
 
+        self.had_error = true;
         Err(anyhow::anyhow!("Expect expression."))
     }
 
