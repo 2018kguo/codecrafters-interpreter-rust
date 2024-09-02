@@ -3,6 +3,8 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::process::exit;
+mod ast;
+mod parser;
 mod scanner;
 
 fn main() -> Result<()> {
@@ -31,6 +33,29 @@ fn main() -> Result<()> {
             if scan_result.had_error {
                 exit(65);
             }
+        }
+        "parse" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                String::new()
+            });
+
+            let mut scanner = scanner::Scanner::new(file_contents);
+            let scan_result = scanner.scan_tokens()?;
+            if scan_result.had_error {
+                exit(65);
+            }
+
+            let mut parser = parser::Parser::new(scan_result.tokens);
+            let expression = parser.parse();
+
+            if parser.had_error {
+                exit(65);
+            }
+
+            let ast_printer = ast::AstPrinter::new();
+            let ast_string = ast_printer.print(&expression.unwrap());
+            println!("{}", ast_string);
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();

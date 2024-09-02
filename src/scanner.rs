@@ -4,8 +4,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
-#[derive(Debug, Clone)]
-enum TokenType {
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum TokenType {
     LeftParen,
     RightParen,
     LeftBrace,
@@ -118,7 +118,7 @@ impl Display for TokenType {
 }
 
 #[derive(Debug, Clone)]
-enum Literal {
+pub enum Literal {
     Number(f64),
     String(String),
     Boolean(bool),
@@ -144,10 +144,10 @@ impl fmt::Display for Literal {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    token_type: TokenType,
-    lexeme: String,
-    literal: Option<Literal>,
-    line: usize,
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub literal: Option<Literal>,
+    pub line: usize,
 }
 
 pub struct Scanner {
