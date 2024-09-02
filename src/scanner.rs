@@ -342,15 +342,15 @@ impl Scanner {
     }
 
     fn is_digit(&self, c: char) -> bool {
-        return c >= '0' && c <= '9';
+        c.is_ascii_digit()
     }
 
     fn is_alpha(&self, c: char) -> bool {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+        c.is_ascii_alphabetic() || c == '_'
     }
 
     fn is_alphanumeric(&self, c: char) -> bool {
-        return self.is_digit(c) || self.is_alpha(c);
+        self.is_digit(c) || self.is_alpha(c)
     }
 
     fn number(&mut self) {

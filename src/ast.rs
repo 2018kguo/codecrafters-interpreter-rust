@@ -124,27 +124,27 @@ impl AstPrinter {
 
     fn parenthesize(&self, name: String, expressions: Vec<&Expr>) -> String {
         let mut result = String::new();
-        result.push_str("(");
+        result.push('(');
         result.push_str(&name);
         for expr in expressions {
-            result.push_str(" ");
+            result.push(' ');
             result.push_str(&expr.accept(self));
         }
-        result.push_str(")");
+        result.push(')');
         result
     }
 }
 
 impl Visitor<String> for AstPrinter {
     fn visit_binary(&self, binary: &Binary) -> String {
-        return self.parenthesize(
+        self.parenthesize(
             binary.operator.lexeme.clone(),
             vec![&binary.left, &binary.right],
-        );
+        )
     }
 
     fn visit_grouping(&self, grouping: &Grouping) -> String {
-        return self.parenthesize("group".to_string(), vec![&grouping.expression]);
+        self.parenthesize("group".to_string(), vec![&grouping.expression])
     }
 
     fn visit_literal(&self, literal: &LiteralExpr) -> String {
@@ -152,11 +152,11 @@ impl Visitor<String> for AstPrinter {
             return "nil".to_string();
         }
 
-        return format!("{}", literal.value);
+        format!("{}", literal.value)
     }
 
     fn visit_unary(&self, unary: &Unary) -> String {
-        return self.parenthesize(unary.operator.lexeme.clone(), vec![&unary.right]);
+        self.parenthesize(unary.operator.lexeme.clone(), vec![&unary.right])
     }
 }
 
@@ -206,7 +206,7 @@ impl Interpreter {
         if matches!(a, Literal::Nil) {
             return false;
         }
-        return a == b;
+        a == b
     }
 }
 

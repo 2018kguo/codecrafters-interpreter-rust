@@ -1,7 +1,6 @@
 use anyhow::Result;
 use std::env;
 use std::fs;
-use std::io::{self, Write};
 use std::process::exit;
 mod ast;
 mod parser;
@@ -10,7 +9,7 @@ mod scanner;
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        writeln!(io::stderr(), "Usage: {} tokenize <filename>", args[0]).unwrap();
+        eprintln!("Usage: {} tokenize <filename>", args[0]);
         return Ok(());
     }
 
@@ -19,11 +18,8 @@ fn main() -> Result<()> {
 
     match command.as_str() {
         "tokenize" => {
-            // You can use print statements as follows for debugging, they'll be visible when running tests.
-            writeln!(io::stderr(), "Logs from your program will appear here!").unwrap();
-
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -36,7 +32,7 @@ fn main() -> Result<()> {
         }
         "parse" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -59,7 +55,7 @@ fn main() -> Result<()> {
         }
         "evaluate" => {
             let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+                eprintln!("Failed to read file {}", filename);
                 String::new()
             });
 
@@ -71,29 +67,31 @@ fn main() -> Result<()> {
 
             let mut parser = parser::Parser::new(scan_result.tokens);
             let expression = parser.parse();
-            
+
             if parser.had_error || expression.is_err() {
                 exit(65);
             }
 
             let interpreter = ast::Interpreter::new();
             let result = interpreter.interpret(expression.unwrap());
-            
+
             match result {
                 Ok(res) => {
                     println!("{}", res);
-                },
+                }
                 Err(err) => {
                     let runtime_error = err.downcast_ref::<ast::RuntimeError>().unwrap();
                     eprintln!(
-                        "{}\n[line {}]", runtime_error.message, runtime_error.token.line.to_string());
-                    
+                        "{}\n[line {}]",
+                        runtime_error.message, runtime_error.token.line
+                    );
+
                     exit(70);
                 }
             }
         }
         _ => {
-            writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
+            eprintln!("Unknown command: {}", command)
         }
     }
     Ok(())

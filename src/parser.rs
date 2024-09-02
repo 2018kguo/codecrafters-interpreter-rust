@@ -58,7 +58,7 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<Expr> {
-        return self.expression();
+        self.expression()
     }
 
     fn consume(&mut self, token_type: TokenType, message: &str) -> Result<&Token> {
