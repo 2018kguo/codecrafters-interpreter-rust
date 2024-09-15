@@ -52,7 +52,7 @@ fn main() -> Result<()> {
                 exit(65);
             }
 
-            let ast_printer = ast::AstPrinter::new();
+            let mut ast_printer = ast::AstPrinter::new();
             let ast_string = ast_printer.print(&expression.unwrap());
             println!("{}", ast_string);
         }
@@ -75,7 +75,7 @@ fn main() -> Result<()> {
                 exit(65);
             }
 
-            let interpreter = ast::Interpreter::new();
+            let mut interpreter = ast::Interpreter::new();
             let result = interpreter.interpret_expression(expression.unwrap());
 
             match result {

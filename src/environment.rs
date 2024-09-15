@@ -22,6 +22,18 @@ impl Environment {
         self.values.insert(name.to_string(), value);
     }
 
+    pub fn assign(&mut self, name: &Token, value: Literal) -> Result<()> {
+        if self.values.contains_key(name.lexeme.as_str()) {
+            self.values.insert(name.lexeme.clone(), value);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(RuntimeError {
+                token: name.clone(),
+                message: format!("Undefined variable '{}'.", name.lexeme),
+            }))
+        }
+    }
+
     pub fn get(&self, name: &Token) -> Result<Literal> {
         if let Some(value) = self.values.get(name.lexeme.as_str()) {
             Ok(value.clone())

@@ -8,7 +8,7 @@ use crate::{
 };
 
 pub trait Accept<T> {
-    fn accept(&self, visitor: &dyn Visitor<T>) -> T;
+    fn accept(&self, visitor: &mut dyn Visitor<T>) -> T;
 }
 
 pub trait StmtAccept<T> {
@@ -17,8 +17,8 @@ pub trait StmtAccept<T> {
 
 // STATEMENTS
 pub trait StmtVisitor<T> {
-    fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> T;
-    fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
 }
 
@@ -77,28 +77,31 @@ pub enum Expr {
     Literal(LiteralExpr),
     Unary(Unary),
     Variable(Variable),
+    Assign(Assign),
 }
 
 impl Accept<String> for Expr {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         match self {
             Expr::Binary(b) => b.accept(visitor),
             Expr::Grouping(g) => g.accept(visitor),
             Expr::Literal(l) => l.accept(visitor),
             Expr::Unary(u) => u.accept(visitor),
             Expr::Variable(v) => v.accept(visitor),
+            Expr::Assign(a) => a.accept(visitor),
         }
     }
 }
 
 impl Accept<Result<Literal>> for Expr {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         match self {
             Expr::Binary(b) => b.accept(visitor),
             Expr::Grouping(g) => g.accept(visitor),
             Expr::Literal(l) => l.accept(visitor),
             Expr::Unary(u) => u.accept(visitor),
             Expr::Variable(v) => v.accept(visitor),
+            Expr::Assign(a) => a.accept(visitor),
         }
     }
 }
@@ -110,13 +113,13 @@ pub struct Binary {
 }
 
 impl Accept<String> for Binary {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         visitor.visit_binary(self)
     }
 }
 
 impl Accept<Result<Literal>> for Binary {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         visitor.visit_binary(self)
     }
 }
@@ -126,13 +129,13 @@ pub struct Grouping {
 }
 
 impl Accept<String> for Grouping {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         visitor.visit_grouping(self)
     }
 }
 
 impl Accept<Result<Literal>> for Grouping {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         visitor.visit_grouping(self)
     }
 }
@@ -142,13 +145,13 @@ pub struct LiteralExpr {
 }
 
 impl Accept<String> for LiteralExpr {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         visitor.visit_literal(self)
     }
 }
 
 impl Accept<Result<Literal>> for LiteralExpr {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         visitor.visit_literal(self)
     }
 }
@@ -159,13 +162,13 @@ pub struct Unary {
 }
 
 impl Accept<String> for Unary {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         visitor.visit_unary(self)
     }
 }
 
 impl Accept<Result<Literal>> for Unary {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         visitor.visit_unary(self)
     }
 }
@@ -175,23 +178,41 @@ pub struct Variable {
 }
 
 impl Accept<String> for Variable {
-    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
         visitor.visit_variable_expr(self)
     }
 }
 
 impl Accept<Result<Literal>> for Variable {
-    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
         visitor.visit_variable_expr(self)
     }
 }
 
+pub struct Assign {
+    pub name: Token,
+    pub value: Box<Expr>,
+}
+
+impl Accept<Result<Literal>> for Assign {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
+        visitor.visit_assign(self)
+    }
+}
+
+impl Accept<String> for Assign {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
+        visitor.visit_assign(self)
+    }
+}
+
 pub trait Visitor<T> {
-    fn visit_binary(&self, binary: &Binary) -> T;
-    fn visit_grouping(&self, grouping: &Grouping) -> T;
-    fn visit_literal(&self, literal: &LiteralExpr) -> T;
-    fn visit_unary(&self, unary: &Unary) -> T;
-    fn visit_variable_expr(&self, variable: &Variable) -> T;
+    fn visit_binary(&mut self, binary: &Binary) -> T;
+    fn visit_grouping(&mut self, grouping: &Grouping) -> T;
+    fn visit_literal(&mut self, literal: &LiteralExpr) -> T;
+    fn visit_unary(&mut self, unary: &Unary) -> T;
+    fn visit_variable_expr(&mut self, variable: &Variable) -> T;
+    fn visit_assign(&mut self, assign: &Assign) -> T;
 }
 
 pub struct AstPrinter;
@@ -201,11 +222,11 @@ impl AstPrinter {
         AstPrinter
     }
 
-    pub fn print(&self, expr: &Expr) -> String {
+    pub fn print(&mut self, expr: &Expr) -> String {
         expr.accept(self)
     }
 
-    fn parenthesize(&self, name: String, expressions: Vec<&Expr>) -> String {
+    fn parenthesize(&mut self, name: String, expressions: Vec<&Expr>) -> String {
         let mut result = String::new();
         result.push('(');
         result.push_str(&name);
@@ -219,18 +240,18 @@ impl AstPrinter {
 }
 
 impl Visitor<String> for AstPrinter {
-    fn visit_binary(&self, binary: &Binary) -> String {
+    fn visit_binary(&mut self, binary: &Binary) -> String {
         self.parenthesize(
             binary.operator.lexeme.clone(),
             vec![&binary.left, &binary.right],
         )
     }
 
-    fn visit_grouping(&self, grouping: &Grouping) -> String {
+    fn visit_grouping(&mut self, grouping: &Grouping) -> String {
         self.parenthesize("group".to_string(), vec![&grouping.expression])
     }
 
-    fn visit_literal(&self, literal: &LiteralExpr) -> String {
+    fn visit_literal(&mut self, literal: &LiteralExpr) -> String {
         if matches!(literal.value, Literal::Nil) {
             return "nil".to_string();
         }
@@ -238,12 +259,16 @@ impl Visitor<String> for AstPrinter {
         format!("{}", literal.value)
     }
 
-    fn visit_unary(&self, unary: &Unary) -> String {
+    fn visit_unary(&mut self, unary: &Unary) -> String {
         self.parenthesize(unary.operator.lexeme.clone(), vec![&unary.right])
     }
 
-    fn visit_variable_expr(&self, variable: &Variable) -> String {
+    fn visit_variable_expr(&mut self, variable: &Variable) -> String {
         variable.name.lexeme.clone()
+    }
+
+    fn visit_assign(&mut self, assign: &Assign) -> String {
+        format!("{} = {}", assign.name.lexeme, assign.value.accept(self))
     }
 }
 
@@ -281,11 +306,11 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn interpret_expression(&self, expression: Expr) -> Result<Literal> {
+    pub fn interpret_expression(&mut self, expression: Expr) -> Result<Literal> {
         self.evaluate(&expression)
     }
 
-    fn evaluate(&self, expr: &Expr) -> Result<Literal> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<Literal> {
         expr.accept(self)
     }
 
@@ -313,12 +338,12 @@ impl Interpreter {
 }
 
 impl StmtVisitor<Result<()>> for Interpreter {
-    fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> Result<()> {
+    fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> Result<()> {
         self.evaluate(&stmt.expression)?;
         Ok(())
     }
 
-    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<()> {
+    fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> Result<()> {
         let value = self.evaluate(&stmt.expression)?;
         println!("{}", stringify_literal(&value));
         Ok(())
@@ -336,15 +361,15 @@ impl StmtVisitor<Result<()>> for Interpreter {
 }
 
 impl Visitor<Result<Literal>> for Interpreter {
-    fn visit_literal(&self, literal: &LiteralExpr) -> Result<Literal> {
+    fn visit_literal(&mut self, literal: &LiteralExpr) -> Result<Literal> {
         Ok(literal.value.clone())
     }
 
-    fn visit_grouping(&self, grouping: &Grouping) -> Result<Literal> {
+    fn visit_grouping(&mut self, grouping: &Grouping) -> Result<Literal> {
         self.evaluate(&grouping.expression)
     }
 
-    fn visit_unary(&self, unary: &Unary) -> Result<Literal> {
+    fn visit_unary(&mut self, unary: &Unary) -> Result<Literal> {
         let right = self.evaluate(&unary.right)?;
 
         match unary.operator.token_type {
@@ -363,7 +388,7 @@ impl Visitor<Result<Literal>> for Interpreter {
         }
     }
 
-    fn visit_binary(&self, binary: &Binary) -> Result<Literal> {
+    fn visit_binary(&mut self, binary: &Binary) -> Result<Literal> {
         let left = self.evaluate(&binary.left)?;
         let right = self.evaluate(&binary.right)?;
 
@@ -436,8 +461,14 @@ impl Visitor<Result<Literal>> for Interpreter {
         }
     }
 
-    fn visit_variable_expr(&self, variable: &Variable) -> Result<Literal> {
+    fn visit_variable_expr(&mut self, variable: &Variable) -> Result<Literal> {
         self.environment.get(&variable.name)
+    }
+
+    fn visit_assign(&mut self, assign: &Assign) -> Result<Literal> {
+        let value = self.evaluate(&assign.value)?;
+        self.environment.assign(&assign.name, value.clone())?;
+        Ok(value)
     }
 }
 
@@ -482,7 +513,7 @@ mod tests {
                 })),
             })),
         });
-        let ast_printer = AstPrinter::new();
+        let mut ast_printer = AstPrinter::new();
         let ast_string = ast_printer.print(&expression);
         assert_eq!(ast_string, "(* (- 123.0) (group 45.67))");
     }
