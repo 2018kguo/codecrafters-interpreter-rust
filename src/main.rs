@@ -5,7 +5,7 @@ use std::process::exit;
 
 use crate::ast::stringify_literal;
 mod ast;
-mod interpreter;
+mod environment;
 mod parser;
 mod scanner;
 
@@ -112,7 +112,7 @@ fn main() -> Result<()> {
                 exit(65);
             }
 
-            let interpreter = ast::Interpreter::new();
+            let mut interpreter = ast::Interpreter::new();
             let result = interpreter.interpret(expression.unwrap());
 
             match result {

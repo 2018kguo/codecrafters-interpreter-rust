@@ -1,6 +1,8 @@
 use anyhow::Result;
 
-use crate::ast::{Binary, ExpressionStmt, Grouping, LiteralExpr, PrintStmt, Stmt, Unary};
+use crate::ast::{
+    Binary, ExpressionStmt, Grouping, LiteralExpr, PrintStmt, Stmt, Unary, VarStmt, Variable,
+};
 use crate::{
     ast::Expr,
     scanner::{Literal, Token, TokenType},
@@ -60,8 +62,14 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Vec<Stmt>> {
         let mut statements: Vec<Stmt> = Vec::new();
         while !self.is_at_end() {
-            let statement = self.statement()?;
-            statements.push(statement);
+            let declaration = self.declaration();
+            if declaration.is_err() {
+                self.had_error = true;
+                self.synchronize();
+                continue;
+            } else {
+                statements.push(declaration?);
+            }
         }
         Ok(statements)
     }
@@ -95,6 +103,34 @@ impl Parser {
     fn report(&mut self, line: usize, location: &str, message: &str) {
         eprintln!("[line {}] Error{}: {}", line, location, message);
         self.had_error = true;
+    }
+
+    fn declaration(&mut self) -> Result<Stmt> {
+        if self.match_tokens(vec![TokenType::Var]) {
+            return self.var_declaration();
+        }
+        self.statement()
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt> {
+        let name = self
+            .consume(TokenType::Identifier, "Expect variable name.")?
+            .clone();
+
+        let initializer = if self.match_tokens(vec![TokenType::Equal]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(
+            TokenType::Semicolon,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Stmt::Var(VarStmt {
+            name: name.clone(),
+            initializer,
+        }))
     }
 
     fn statement(&mut self) -> Result<Stmt> {
@@ -222,6 +258,12 @@ impl Parser {
         if self.match_tokens(vec![TokenType::Number, TokenType::String]) {
             return Ok(Expr::Literal(LiteralExpr {
                 value: self.previous().literal.as_ref().unwrap().clone(),
+            }));
+        }
+
+        if self.match_tokens(vec![TokenType::Identifier]) {
+            return Ok(Expr::Variable(Variable {
+                name: self.previous().clone(),
             }));
         }
 

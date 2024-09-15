@@ -2,25 +2,35 @@ use std::fmt;
 
 use anyhow::Result;
 
-use crate::scanner::{Literal, Token, TokenType};
+use crate::{
+    environment::Environment,
+    scanner::{Literal, Token, TokenType},
+};
 
 pub trait Accept<T> {
     fn accept(&self, visitor: &dyn Visitor<T>) -> T;
 }
 
 pub trait StmtAccept<T> {
-    fn accept(&self, visitor: &dyn StmtVisitor<T>) -> T;
+    fn accept(&self, visitor: &mut dyn StmtVisitor<T>) -> T;
 }
 
 // STATEMENTS
 pub trait StmtVisitor<T> {
     fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
 }
 
 pub enum Stmt {
     Expression(ExpressionStmt),
     Print(PrintStmt),
+    Var(VarStmt),
+}
+
+pub struct VarStmt {
+    pub name: Token,
+    pub initializer: Option<Expr>,
 }
 
 pub struct ExpressionStmt {
@@ -33,23 +43,30 @@ pub struct PrintStmt {
 
 // technically this is supposed to return null but going to just use string as a placeholder
 impl StmtAccept<Result<()>> for Stmt {
-    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         match self {
             Stmt::Expression(e) => e.accept(visitor),
             Stmt::Print(e) => e.accept(visitor),
+            Stmt::Var(e) => e.accept(visitor),
         }
     }
 }
 
 impl StmtAccept<Result<()>> for ExpressionStmt {
-    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_expression_stmt(self)
     }
 }
 
 impl StmtAccept<Result<()>> for PrintStmt {
-    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_print_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for VarStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_var_stmt(self)
     }
 }
 
@@ -59,6 +76,7 @@ pub enum Expr {
     Grouping(Grouping),
     Literal(LiteralExpr),
     Unary(Unary),
+    Variable(Variable),
 }
 
 impl Accept<String> for Expr {
@@ -68,6 +86,7 @@ impl Accept<String> for Expr {
             Expr::Grouping(g) => g.accept(visitor),
             Expr::Literal(l) => l.accept(visitor),
             Expr::Unary(u) => u.accept(visitor),
+            Expr::Variable(v) => v.accept(visitor),
         }
     }
 }
@@ -79,6 +98,7 @@ impl Accept<Result<Literal>> for Expr {
             Expr::Grouping(g) => g.accept(visitor),
             Expr::Literal(l) => l.accept(visitor),
             Expr::Unary(u) => u.accept(visitor),
+            Expr::Variable(v) => v.accept(visitor),
         }
     }
 }
@@ -150,11 +170,28 @@ impl Accept<Result<Literal>> for Unary {
     }
 }
 
+pub struct Variable {
+    pub name: Token,
+}
+
+impl Accept<String> for Variable {
+    fn accept(&self, visitor: &dyn Visitor<String>) -> String {
+        visitor.visit_variable_expr(self)
+    }
+}
+
+impl Accept<Result<Literal>> for Variable {
+    fn accept(&self, visitor: &dyn Visitor<Result<Literal>>) -> Result<Literal> {
+        visitor.visit_variable_expr(self)
+    }
+}
+
 pub trait Visitor<T> {
     fn visit_binary(&self, binary: &Binary) -> T;
     fn visit_grouping(&self, grouping: &Grouping) -> T;
     fn visit_literal(&self, literal: &LiteralExpr) -> T;
     fn visit_unary(&self, unary: &Unary) -> T;
+    fn visit_variable_expr(&self, variable: &Variable) -> T;
 }
 
 pub struct AstPrinter;
@@ -204,6 +241,10 @@ impl Visitor<String> for AstPrinter {
     fn visit_unary(&self, unary: &Unary) -> String {
         self.parenthesize(unary.operator.lexeme.clone(), vec![&unary.right])
     }
+
+    fn visit_variable_expr(&self, variable: &Variable) -> String {
+        variable.name.lexeme.clone()
+    }
 }
 
 #[derive(Debug)]
@@ -222,16 +263,20 @@ impl fmt::Display for RuntimeError {
 // Implement std::error::Error for RuntimeError
 impl std::error::Error for RuntimeError {}
 
-pub struct Interpreter;
+pub struct Interpreter {
+    environment: Environment,
+}
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter
+        Interpreter {
+            environment: Environment::new(),
+        }
     }
 
-    pub fn interpret(&self, statements: Vec<Stmt>) -> Result<()> {
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
-            self.execute(&statement)?;
+            self.execute(statement)?;
         }
         Ok(())
     }
@@ -244,7 +289,7 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn execute(&self, stmt: &Stmt) -> Result<()> {
+    fn execute(&mut self, stmt: Stmt) -> Result<()> {
         stmt.accept(self)
     }
 
@@ -276,6 +321,16 @@ impl StmtVisitor<Result<()>> for Interpreter {
     fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<()> {
         let value = self.evaluate(&stmt.expression)?;
         println!("{}", stringify_literal(&value));
+        Ok(())
+    }
+
+    fn visit_var_stmt(&mut self, stmt: &VarStmt) -> Result<()> {
+        let mut value = Literal::Nil;
+        if let Some(expr) = &stmt.initializer {
+            value = self.evaluate(expr)?;
+        }
+
+        self.environment.define(&stmt.name.lexeme, value);
         Ok(())
     }
 }
@@ -379,6 +434,10 @@ impl Visitor<Result<Literal>> for Interpreter {
                 message: "Invalid binary operator.".to_string(),
             })),
         }
+    }
+
+    fn visit_variable_expr(&self, variable: &Variable) -> Result<Literal> {
+        self.environment.get(&variable.name)
     }
 }
 
