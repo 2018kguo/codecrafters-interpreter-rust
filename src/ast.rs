@@ -8,6 +8,52 @@ pub trait Accept<T> {
     fn accept(&self, visitor: &dyn Visitor<T>) -> T;
 }
 
+pub trait StmtAccept<T> {
+    fn accept(&self, visitor: &dyn StmtVisitor<T>) -> T;
+}
+
+// STATEMENTS
+pub trait StmtVisitor<T> {
+    fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> T;
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> T;
+}
+
+pub enum Stmt {
+    Expression(ExpressionStmt),
+    Print(PrintStmt),
+}
+
+pub struct ExpressionStmt {
+    pub expression: Expr,
+}
+
+pub struct PrintStmt {
+    pub expression: Expr,
+}
+
+// technically this is supposed to return null but going to just use string as a placeholder
+impl StmtAccept<Result<()>> for Stmt {
+    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+        match self {
+            Stmt::Expression(e) => e.accept(visitor),
+            Stmt::Print(e) => e.accept(visitor),
+        }
+    }
+}
+
+impl StmtAccept<Result<()>> for ExpressionStmt {
+    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_expression_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for PrintStmt {
+    fn accept(&self, visitor: &dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_print_stmt(self)
+    }
+}
+
+// EXPRESSIONS
 pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),
@@ -183,12 +229,23 @@ impl Interpreter {
         Interpreter
     }
 
-    pub fn interpret(&self, expression: Expr) -> Result<Literal> {
+    pub fn interpret(&self, statements: Vec<Stmt>) -> Result<()> {
+        for statement in statements {
+            self.execute(&statement)?;
+        }
+        Ok(())
+    }
+
+    pub fn interpret_expression(&self, expression: Expr) -> Result<Literal> {
         self.evaluate(&expression)
     }
 
     fn evaluate(&self, expr: &Expr) -> Result<Literal> {
         expr.accept(self)
+    }
+
+    fn execute(&self, stmt: &Stmt) -> Result<()> {
+        stmt.accept(self)
     }
 
     fn is_truthy(&self, literal: &Literal) -> bool {
@@ -207,6 +264,19 @@ impl Interpreter {
             return false;
         }
         a == b
+    }
+}
+
+impl StmtVisitor<Result<()>> for Interpreter {
+    fn visit_expression_stmt(&self, stmt: &ExpressionStmt) -> Result<()> {
+        self.evaluate(&stmt.expression)?;
+        Ok(())
+    }
+
+    fn visit_print_stmt(&self, stmt: &PrintStmt) -> Result<()> {
+        let value = self.evaluate(&stmt.expression)?;
+        println!("{}", stringify_literal(&value));
+        Ok(())
     }
 }
 
@@ -230,7 +300,7 @@ impl Visitor<Result<Literal>> for Interpreter {
                     message: "Operand must be a number.".to_string(),
                 })),
             },
-            TokenType::Bang => Ok(Literal::Boolean(!self.is_truthy(&right))), 
+            TokenType::Bang => Ok(Literal::Boolean(!self.is_truthy(&right))),
             _ => Err(anyhow::anyhow!(RuntimeError {
                 token: unary.operator.clone(),
                 message: "Invalid unary operator.".to_string(),

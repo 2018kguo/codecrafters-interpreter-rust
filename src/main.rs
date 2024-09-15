@@ -5,6 +5,7 @@ use std::process::exit;
 
 use crate::ast::stringify_literal;
 mod ast;
+mod interpreter;
 mod parser;
 mod scanner;
 
@@ -45,7 +46,7 @@ fn main() -> Result<()> {
             }
 
             let mut parser = parser::Parser::new(scan_result.tokens);
-            let expression = parser.parse();
+            let expression = parser.parse_expression();
 
             if parser.had_error || expression.is_err() {
                 exit(65);
@@ -68,6 +69,43 @@ fn main() -> Result<()> {
             }
 
             let mut parser = parser::Parser::new(scan_result.tokens);
+            let expression = parser.parse_expression();
+
+            if parser.had_error || expression.is_err() {
+                exit(65);
+            }
+
+            let interpreter = ast::Interpreter::new();
+            let result = interpreter.interpret_expression(expression.unwrap());
+
+            match result {
+                Ok(result_literal) => {
+                    println!("{}", stringify_literal(&result_literal));
+                }
+                Err(err) => {
+                    let runtime_error = err.downcast_ref::<ast::RuntimeError>().unwrap();
+                    eprintln!(
+                        "{}\n[line {}]",
+                        runtime_error.message, runtime_error.token.line
+                    );
+
+                    exit(70);
+                }
+            }
+        }
+        "run" => {
+            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+                eprintln!("Failed to read file {}", filename);
+                String::new()
+            });
+
+            let mut scanner = scanner::Scanner::new(file_contents);
+            let scan_result = scanner.scan_tokens()?;
+            if scan_result.had_error {
+                exit(65);
+            }
+
+            let mut parser = parser::Parser::new(scan_result.tokens);
             let expression = parser.parse();
 
             if parser.had_error || expression.is_err() {
@@ -78,9 +116,7 @@ fn main() -> Result<()> {
             let result = interpreter.interpret(expression.unwrap());
 
             match result {
-                Ok(result_literal) => {
-                    println!("{}", stringify_literal(&result_literal));
-                }
+                Ok(_) => {}
                 Err(err) => {
                     let runtime_error = err.downcast_ref::<ast::RuntimeError>().unwrap();
                     eprintln!(
