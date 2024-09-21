@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::ast::{
-    Assign, Binary, ExpressionStmt, Grouping, LiteralExpr, PrintStmt, Stmt, Unary, VarStmt,
-    Variable,
+    Assign, Binary, BlockStmt, ExpressionStmt, Grouping, LiteralExpr, PrintStmt, Stmt, Unary,
+    VarStmt, Variable,
 };
 use crate::{
     ast::Expr,
@@ -138,6 +138,9 @@ impl Parser {
         if self.match_tokens(vec![TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_tokens(vec![TokenType::LeftBrace]) {
+            return self.block();
+        }
         self.expression_statement()
     }
 
@@ -151,6 +154,18 @@ impl Parser {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::Expression(ExpressionStmt { expression: value }))
+    }
+
+    fn block(&mut self) -> Result<Stmt> {
+        let mut statements: Vec<Stmt> = Vec::new();
+
+        while !self.check(TokenType::RightBrace) && !self.is_at_end() {
+            let declaration = self.declaration()?;
+            statements.push(declaration);
+        }
+
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
+        Ok(Stmt::Block(BlockStmt { statements }))
     }
 
     fn expression(&mut self) -> Result<Expr> {

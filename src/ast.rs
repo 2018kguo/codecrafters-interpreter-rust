@@ -3,7 +3,7 @@ use std::fmt;
 use anyhow::Result;
 
 use crate::{
-    environment::Environment,
+    environment::EnvironmentContext,
     scanner::{Literal, Token, TokenType},
 };
 
@@ -20,12 +20,14 @@ pub trait StmtVisitor<T> {
     fn visit_expression_stmt(&mut self, stmt: &ExpressionStmt) -> T;
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
 }
 
 pub enum Stmt {
     Expression(ExpressionStmt),
     Print(PrintStmt),
     Var(VarStmt),
+    Block(BlockStmt),
 }
 
 pub struct VarStmt {
@@ -41,6 +43,10 @@ pub struct PrintStmt {
     pub expression: Expr,
 }
 
+pub struct BlockStmt {
+    pub statements: Vec<Stmt>,
+}
+
 // technically this is supposed to return null but going to just use string as a placeholder
 impl StmtAccept<Result<()>> for Stmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
@@ -48,6 +54,7 @@ impl StmtAccept<Result<()>> for Stmt {
             Stmt::Expression(e) => e.accept(visitor),
             Stmt::Print(e) => e.accept(visitor),
             Stmt::Var(e) => e.accept(visitor),
+            Stmt::Block(e) => e.accept(visitor),
         }
     }
 }
@@ -67,6 +74,12 @@ impl StmtAccept<Result<()>> for PrintStmt {
 impl StmtAccept<Result<()>> for VarStmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_var_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for BlockStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_block_stmt(self)
     }
 }
 
@@ -289,19 +302,19 @@ impl fmt::Display for RuntimeError {
 impl std::error::Error for RuntimeError {}
 
 pub struct Interpreter {
-    environment: Environment,
+    environment_context: EnvironmentContext,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            environment: Environment::new(),
+            environment_context: EnvironmentContext::new(),
         }
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
-            self.execute(statement)?;
+            self.execute(&statement)?;
         }
         Ok(())
     }
@@ -314,7 +327,7 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    fn execute(&mut self, stmt: Stmt) -> Result<()> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<()> {
         stmt.accept(self)
     }
 
@@ -355,7 +368,16 @@ impl StmtVisitor<Result<()>> for Interpreter {
             value = self.evaluate(expr)?;
         }
 
-        self.environment.define(&stmt.name.lexeme, value);
+        self.environment_context.define(&stmt.name.lexeme, value)?;
+        Ok(())
+    }
+
+    fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<()> {
+        self.environment_context.begin_scope();
+        for statement in &stmt.statements {
+            self.execute(statement)?;
+        }
+        self.environment_context.exit_scope()?;
         Ok(())
     }
 }
@@ -462,12 +484,13 @@ impl Visitor<Result<Literal>> for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, variable: &Variable) -> Result<Literal> {
-        self.environment.get(&variable.name)
+        self.environment_context.get(&variable.name)
     }
 
     fn visit_assign(&mut self, assign: &Assign) -> Result<Literal> {
         let value = self.evaluate(&assign.value)?;
-        self.environment.assign(&assign.name, value.clone())?;
+        self.environment_context
+            .assign(&assign.name, value.clone())?;
         Ok(value)
     }
 }
