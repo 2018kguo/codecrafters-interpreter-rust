@@ -1,4 +1,4 @@
-[![progress-banner](https://backend.codecrafters.io/progress/interpreter/735c786d-5064-4c3a-acb9-00525c2367dd)](https://app.codecrafters.io/users/codecrafters-bot?r=2qF)
+[![progress-banner](https://backend.codecrafters.io/progress/interpreter/735c786d-5064-4c3a-acb9-00525c2367dd)](https://app.codecrafters.io/users/2018kguo)
 
 This is a starting point for Rust solutions to the
 ["Build Your Own Build your own Interpreter" Challenge](https://app.codecrafters.io/courses/interpreter/overview).
