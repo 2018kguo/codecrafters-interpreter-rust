@@ -21,6 +21,7 @@ pub trait StmtVisitor<T> {
     fn visit_print_stmt(&mut self, stmt: &PrintStmt) -> T;
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
 }
 
 pub enum Stmt {
@@ -28,6 +29,7 @@ pub enum Stmt {
     Print(PrintStmt),
     Var(VarStmt),
     Block(BlockStmt),
+    If(IfStmt),
 }
 
 pub struct VarStmt {
@@ -47,6 +49,12 @@ pub struct BlockStmt {
     pub statements: Vec<Stmt>,
 }
 
+pub struct IfStmt {
+    pub condition: Expr,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
+}
+
 // technically this is supposed to return null but going to just use string as a placeholder
 impl StmtAccept<Result<()>> for Stmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
@@ -55,6 +63,7 @@ impl StmtAccept<Result<()>> for Stmt {
             Stmt::Print(e) => e.accept(visitor),
             Stmt::Var(e) => e.accept(visitor),
             Stmt::Block(e) => e.accept(visitor),
+            Stmt::If(e) => e.accept(visitor),
         }
     }
 }
@@ -80,6 +89,12 @@ impl StmtAccept<Result<()>> for VarStmt {
 impl StmtAccept<Result<()>> for BlockStmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_block_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for IfStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_if_stmt(self)
     }
 }
 
@@ -378,6 +393,16 @@ impl StmtVisitor<Result<()>> for Interpreter {
             self.execute(statement)?;
         }
         self.environment_context.exit_scope()?;
+        Ok(())
+    }
+
+    fn visit_if_stmt(&mut self, stmt: &IfStmt) -> Result<()> {
+        let condition_value = self.evaluate(&stmt.condition)?;
+        if self.is_truthy(&condition_value) {
+            self.execute(&stmt.then_branch)?;
+        } else if let Some(else_branch) = &stmt.else_branch {
+            self.execute(else_branch)?;
+        }
         Ok(())
     }
 }
