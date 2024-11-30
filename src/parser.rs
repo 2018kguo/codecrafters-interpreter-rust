@@ -211,7 +211,7 @@ impl Parser {
         if !self.check(TokenType::RightParen) {
             increment = Some(self.expression()?);
         }
-        self.consume(TokenType::Semicolon, "Expect ';' after for clauses.")?;
+        self.consume(TokenType::RightParen, "Expect ')' after for clauses.")?;
 
         let mut body = self.statement()?;
 
