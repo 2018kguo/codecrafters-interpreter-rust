@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::ast::{
     Assign, Binary, BlockStmt, ExpressionStmt, Grouping, IfStmt, LiteralExpr, Logical, PrintStmt,
-    Stmt, Unary, VarStmt, Variable,
+    Stmt, Unary, VarStmt, Variable, WhileStmt,
 };
 use crate::{
     ast::Expr,
@@ -141,6 +141,9 @@ impl Parser {
         if self.match_tokens(vec![TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_tokens(vec![TokenType::While]) {
+            return self.while_statement();
+        }
         if self.match_tokens(vec![TokenType::LeftBrace]) {
             return self.block();
         }
@@ -170,6 +173,17 @@ impl Parser {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::Print(PrintStmt { expression: value }))
+    }
+
+    fn while_statement(&mut self) -> Result<Stmt> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expect ')' afte condition.")?;
+        let body = self.statement()?;
+        Ok(Stmt::While(WhileStmt {
+            condition,
+            body: Box::new(body),
+        }))
     }
 
     fn expression_statement(&mut self) -> Result<Stmt> {

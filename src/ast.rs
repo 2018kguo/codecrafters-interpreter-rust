@@ -22,6 +22,7 @@ pub trait StmtVisitor<T> {
     fn visit_var_stmt(&mut self, stmt: &VarStmt) -> T;
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> T;
 }
 
 pub enum Stmt {
@@ -30,6 +31,7 @@ pub enum Stmt {
     Var(VarStmt),
     Block(BlockStmt),
     If(IfStmt),
+    While(WhileStmt),
 }
 
 pub struct VarStmt {
@@ -55,6 +57,11 @@ pub struct IfStmt {
     pub else_branch: Option<Box<Stmt>>,
 }
 
+pub struct WhileStmt {
+    pub condition: Expr,
+    pub body: Box<Stmt>,
+}
+
 // technically this is supposed to return null but going to just use string as a placeholder
 impl StmtAccept<Result<()>> for Stmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
@@ -64,6 +71,7 @@ impl StmtAccept<Result<()>> for Stmt {
             Stmt::Var(e) => e.accept(visitor),
             Stmt::Block(e) => e.accept(visitor),
             Stmt::If(e) => e.accept(visitor),
+            Stmt::While(e) => e.accept(visitor),
         }
     }
 }
@@ -95,6 +103,12 @@ impl StmtAccept<Result<()>> for BlockStmt {
 impl StmtAccept<Result<()>> for IfStmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_if_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for WhileStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_while_stmt(self)
     }
 }
 
@@ -431,6 +445,15 @@ impl StmtVisitor<Result<()>> for Interpreter {
             self.execute(&stmt.then_branch)?;
         } else if let Some(else_branch) = &stmt.else_branch {
             self.execute(else_branch)?;
+        }
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> Result<()> {
+        let mut while_condition = self.evaluate(&stmt.condition)?;
+        while self.is_truthy(&while_condition) {
+            self.execute(&stmt.body)?;
+            while_condition = self.evaluate(&stmt.condition)?;
         }
         Ok(())
     }
