@@ -106,6 +106,7 @@ pub enum Expr {
     Unary(Unary),
     Variable(Variable),
     Assign(Assign),
+    Logical(Logical),
 }
 
 impl Accept<String> for Expr {
@@ -117,6 +118,7 @@ impl Accept<String> for Expr {
             Expr::Unary(u) => u.accept(visitor),
             Expr::Variable(v) => v.accept(visitor),
             Expr::Assign(a) => a.accept(visitor),
+            Expr::Logical(l) => l.accept(visitor),
         }
     }
 }
@@ -130,6 +132,7 @@ impl Accept<Result<Literal>> for Expr {
             Expr::Unary(u) => u.accept(visitor),
             Expr::Variable(v) => v.accept(visitor),
             Expr::Assign(a) => a.accept(visitor),
+            Expr::Logical(l) => l.accept(visitor),
         }
     }
 }
@@ -234,6 +237,24 @@ impl Accept<String> for Assign {
     }
 }
 
+pub struct Logical {
+    pub left: Box<Expr>,
+    pub operator: Token,
+    pub right: Box<Expr>,
+}
+
+impl Accept<Result<Literal>> for Logical {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
+        visitor.visit_logical(self)
+    }
+}
+
+impl Accept<String> for Logical {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
+        visitor.visit_logical(self)
+    }
+}
+
 pub trait Visitor<T> {
     fn visit_binary(&mut self, binary: &Binary) -> T;
     fn visit_grouping(&mut self, grouping: &Grouping) -> T;
@@ -241,6 +262,7 @@ pub trait Visitor<T> {
     fn visit_unary(&mut self, unary: &Unary) -> T;
     fn visit_variable_expr(&mut self, variable: &Variable) -> T;
     fn visit_assign(&mut self, assign: &Assign) -> T;
+    fn visit_logical(&mut self, logical: &Logical) -> T;
 }
 
 pub struct AstPrinter;
@@ -297,6 +319,13 @@ impl Visitor<String> for AstPrinter {
 
     fn visit_assign(&mut self, assign: &Assign) -> String {
         format!("{} = {}", assign.name.lexeme, assign.value.accept(self))
+    }
+
+    fn visit_logical(&mut self, logical: &Logical) -> String {
+        self.parenthesize(
+            logical.operator.lexeme.clone(),
+            vec![&logical.left, &logical.right],
+        )
     }
 }
 
@@ -517,6 +546,20 @@ impl Visitor<Result<Literal>> for Interpreter {
         self.environment_context
             .assign(&assign.name, value.clone())?;
         Ok(value)
+    }
+
+    fn visit_logical(&mut self, logical: &Logical) -> Result<Literal> {
+        let left = self.evaluate(&logical.left)?;
+
+        if logical.operator.token_type == TokenType::Or {
+            if self.is_truthy(&left) {
+                return Ok(left);
+            }
+        } else if !self.is_truthy(&left) {
+            return Ok(left);
+        }
+
+        self.evaluate(&logical.right)
     }
 }
 
