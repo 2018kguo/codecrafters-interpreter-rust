@@ -135,6 +135,9 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Result<Stmt> {
+        if self.match_tokens(vec![TokenType::For]) {
+            return self.for_statement();
+        }
         if self.match_tokens(vec![TokenType::If]) {
             return self.if_statement();
         }
@@ -184,6 +187,62 @@ impl Parser {
             condition,
             body: Box::new(body),
         }))
+    }
+
+    fn for_statement(&mut self) -> Result<Stmt> {
+        self.consume(TokenType::LeftParen, "Expect '(' after 'for'.")?;
+
+        let initializer;
+        if self.match_tokens(vec![TokenType::Semicolon]) {
+            initializer = None;
+        } else if self.match_tokens(vec![TokenType::Var]) {
+            initializer = Some(self.var_declaration()?);
+        } else {
+            initializer = Some(self.expression_statement()?);
+        }
+
+        let mut condition = None;
+        if !self.check(TokenType::Semicolon) {
+            condition = Some(self.expression()?);
+        }
+        self.consume(TokenType::Semicolon, "Expect ';' after loop condition.")?;
+
+        let mut increment = None;
+        if !self.check(TokenType::RightParen) {
+            increment = Some(self.expression()?);
+        }
+        self.consume(TokenType::Semicolon, "Expect ';' after for clauses.")?;
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Stmt::Block(BlockStmt {
+                statements: vec![
+                    body,
+                    Stmt::Expression(ExpressionStmt {
+                        expression: increment,
+                    }),
+                ],
+            });
+        }
+
+        if condition.is_none() {
+            condition = Some(Expr::Literal(LiteralExpr {
+                value: Literal::Boolean(true),
+            }));
+        }
+        body = Stmt::While(WhileStmt {
+            condition: condition.unwrap(),
+            body: Box::new(body),
+        });
+
+        if let Some(_initializer) = initializer {
+            body = Stmt::Block(BlockStmt {
+                statements: vec![_initializer, body],
+            });
+        }
+
+        Ok(body)
     }
 
     fn expression_statement(&mut self) -> Result<Stmt> {
