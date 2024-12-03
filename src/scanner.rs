@@ -4,6 +4,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
+use crate::ast::Interpreter;
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
     LeftParen,
@@ -117,12 +119,36 @@ impl Display for TokenType {
     }
 }
 
+pub type LoxFuncPtr = fn(&Interpreter, &Vec<Literal>) -> Result<Literal>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Callable {
+    pub arity: usize,
+    pub func_ptr: LoxFuncPtr,
+    pub name: String,
+}
+
+impl Callable {
+    pub fn new(arity: usize, func_ptr: LoxFuncPtr, name: String) -> Callable {
+        Callable {
+            arity,
+            func_ptr,
+            name,
+        }
+    }
+
+    pub fn call(&self, interpreter: &Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
+        (self.func_ptr)(interpreter, arguments)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Number(f64),
     String(String),
     Boolean(bool),
     Nil,
+    Callable(Callable),
 }
 
 impl fmt::Display for Literal {
@@ -137,6 +163,7 @@ impl fmt::Display for Literal {
             }
             Literal::String(s) => write!(f, "{}", s),
             Literal::Boolean(b) => write!(f, "{}", b),
+            Literal::Callable(c) => write!(f, "<callable {}>", c.name),
             Literal::Nil => write!(f, "nil"),
         }
     }

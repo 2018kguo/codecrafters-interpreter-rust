@@ -2,9 +2,10 @@ use std::fmt;
 
 use anyhow::Result;
 
+use crate::native_funcs::NATIVE_FUNCS;
 use crate::{
     environment::EnvironmentContext,
-    scanner::{Literal, Token, TokenType},
+    scanner::{Callable, Literal, Token, TokenType},
 };
 
 pub trait Accept<T> {
@@ -121,6 +122,7 @@ pub enum Expr {
     Variable(Variable),
     Assign(Assign),
     Logical(Logical),
+    Call(Call),
 }
 
 impl Accept<String> for Expr {
@@ -133,6 +135,7 @@ impl Accept<String> for Expr {
             Expr::Variable(v) => v.accept(visitor),
             Expr::Assign(a) => a.accept(visitor),
             Expr::Logical(l) => l.accept(visitor),
+            Expr::Call(c) => c.accept(visitor),
         }
     }
 }
@@ -147,6 +150,7 @@ impl Accept<Result<Literal>> for Expr {
             Expr::Variable(v) => v.accept(visitor),
             Expr::Assign(a) => a.accept(visitor),
             Expr::Logical(l) => l.accept(visitor),
+            Expr::Call(c) => c.accept(visitor),
         }
     }
 }
@@ -269,6 +273,24 @@ impl Accept<String> for Logical {
     }
 }
 
+pub struct Call {
+    pub callee: Box<Expr>,
+    pub paren: Token,
+    pub arguments: Vec<Expr>,
+}
+
+impl Accept<Result<Literal>> for Call {
+    fn accept(&self, visitor: &mut dyn Visitor<Result<Literal>>) -> Result<Literal> {
+        visitor.visit_call(self)
+    }
+}
+
+impl Accept<String> for Call {
+    fn accept(&self, visitor: &mut dyn Visitor<String>) -> String {
+        visitor.visit_call(self)
+    }
+}
+
 pub trait Visitor<T> {
     fn visit_binary(&mut self, binary: &Binary) -> T;
     fn visit_grouping(&mut self, grouping: &Grouping) -> T;
@@ -277,6 +299,7 @@ pub trait Visitor<T> {
     fn visit_variable_expr(&mut self, variable: &Variable) -> T;
     fn visit_assign(&mut self, assign: &Assign) -> T;
     fn visit_logical(&mut self, logical: &Logical) -> T;
+    fn visit_call(&mut self, call: &Call) -> T;
 }
 
 pub struct AstPrinter;
@@ -341,6 +364,18 @@ impl Visitor<String> for AstPrinter {
             vec![&logical.left, &logical.right],
         )
     }
+
+    fn visit_call(&mut self, call: &Call) -> String {
+        format!(
+            "{}({})",
+            call.callee.accept(self),
+            call.arguments
+                .iter()
+                .map(|arg| arg.accept(self))
+                .collect::<Vec<String>>()
+                .join(", ")
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -365,8 +400,19 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut env_context = EnvironmentContext::new();
+        // add native functions to the environment
+        for func in NATIVE_FUNCS {
+            env_context
+                .define(
+                    func.0,
+                    Literal::Callable(Callable::new(func.2, func.1, func.0.to_string())),
+                )
+                .unwrap();
+        }
+
         Interpreter {
-            environment_context: EnvironmentContext::new(),
+            environment_context: env_context,
         }
     }
 
@@ -583,6 +629,35 @@ impl Visitor<Result<Literal>> for Interpreter {
         }
 
         self.evaluate(&logical.right)
+    }
+
+    fn visit_call(&mut self, call: &Call) -> Result<Literal> {
+        let callee = self.evaluate(&call.callee)?;
+
+        let mut arguments = Vec::new();
+        for argument in &call.arguments {
+            arguments.push(self.evaluate(argument)?);
+        }
+
+        match callee {
+            Literal::Callable(c) => {
+                if arguments.len() != c.arity {
+                    return Err(anyhow::anyhow!(RuntimeError {
+                        token: call.paren.clone(),
+                        message: format!(
+                            "Expected {} arguments but got {}.",
+                            c.arity,
+                            arguments.len()
+                        ),
+                    }));
+                }
+                c.call(self, &arguments)
+            }
+            _ => Err(anyhow::anyhow!(RuntimeError {
+                token: call.paren.clone(),
+                message: "Can only call functions and classes.".to_string(),
+            })),
+        }
     }
 }
 

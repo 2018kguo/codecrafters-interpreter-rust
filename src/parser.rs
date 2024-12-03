@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::ast::{
-    Assign, Binary, BlockStmt, ExpressionStmt, Grouping, IfStmt, LiteralExpr, Logical, PrintStmt,
-    Stmt, Unary, VarStmt, Variable, WhileStmt,
+    Assign, Binary, BlockStmt, Call, ExpressionStmt, Grouping, IfStmt, LiteralExpr, Logical,
+    PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 };
 use crate::{
     ast::Expr,
@@ -401,7 +401,48 @@ impl Parser {
             }));
         }
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr> {
+        let mut expr = self.primary()?;
+
+        loop {
+            if self.match_tokens(vec![TokenType::LeftParen]) {
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee_expr: Expr) -> Result<Expr> {
+        let mut arguments: Vec<Expr> = Vec::new();
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if arguments.len() >= 255 {
+                    let token = self.peek().clone();
+                    self.error(&token, "Cannot have more than 255 arguments.");
+                }
+
+                arguments.push(self.expression()?);
+
+                if !self.match_tokens(vec![TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let paren = self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
+
+        Ok(Expr::Call(Call {
+            callee: Box::new(callee_expr),
+            paren: paren.clone(),
+            arguments,
+        }))
     }
 
     fn primary(&mut self) -> Result<Expr> {

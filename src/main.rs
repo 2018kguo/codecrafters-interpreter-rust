@@ -6,6 +6,7 @@ use std::process::exit;
 use crate::ast::stringify_literal;
 mod ast;
 mod environment;
+mod native_funcs;
 mod parser;
 mod scanner;
 
