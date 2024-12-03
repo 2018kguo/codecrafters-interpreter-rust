@@ -1,12 +1,12 @@
 use std::fmt;
 
-use anyhow::Result;
-
 use crate::native_funcs::NATIVE_FUNCS;
+use crate::scanner::UserFunction;
 use crate::{
     environment::EnvironmentContext,
-    scanner::{Callable, Literal, Token, TokenType},
+    scanner::{Callable, Literal, NativeFunction, Token, TokenType},
 };
+use anyhow::Result;
 
 pub trait Accept<T> {
     fn accept(&self, visitor: &mut dyn Visitor<T>) -> T;
@@ -24,8 +24,10 @@ pub trait StmtVisitor<T> {
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> T;
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> T;
+    fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> T;
 }
 
+#[derive(Clone)]
 pub enum Stmt {
     Expression(ExpressionStmt),
     Print(PrintStmt),
@@ -33,34 +35,48 @@ pub enum Stmt {
     Block(BlockStmt),
     If(IfStmt),
     While(WhileStmt),
+    Function(FunctionStmt),
 }
 
+#[derive(Clone)]
 pub struct VarStmt {
     pub name: Token,
     pub initializer: Option<Expr>,
 }
 
+#[derive(Clone)]
 pub struct ExpressionStmt {
     pub expression: Expr,
 }
 
+#[derive(Clone)]
 pub struct PrintStmt {
     pub expression: Expr,
 }
 
+#[derive(Clone)]
 pub struct BlockStmt {
     pub statements: Vec<Stmt>,
 }
 
+#[derive(Clone)]
 pub struct IfStmt {
     pub condition: Expr,
     pub then_branch: Box<Stmt>,
     pub else_branch: Option<Box<Stmt>>,
 }
 
+#[derive(Clone)]
 pub struct WhileStmt {
     pub condition: Expr,
     pub body: Box<Stmt>,
+}
+
+#[derive(Clone)]
+pub struct FunctionStmt {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
 }
 
 // technically this is supposed to return null but going to just use string as a placeholder
@@ -73,6 +89,7 @@ impl StmtAccept<Result<()>> for Stmt {
             Stmt::Block(e) => e.accept(visitor),
             Stmt::If(e) => e.accept(visitor),
             Stmt::While(e) => e.accept(visitor),
+            Stmt::Function(e) => e.accept(visitor),
         }
     }
 }
@@ -113,7 +130,14 @@ impl StmtAccept<Result<()>> for WhileStmt {
     }
 }
 
+impl StmtAccept<Result<()>> for FunctionStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_function_stmt(self)
+    }
+}
+
 // EXPRESSIONS
+#[derive(Clone)]
 pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),
@@ -155,6 +179,7 @@ impl Accept<Result<Literal>> for Expr {
     }
 }
 
+#[derive(Clone)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
@@ -173,6 +198,7 @@ impl Accept<Result<Literal>> for Binary {
     }
 }
 
+#[derive(Clone)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
@@ -189,6 +215,7 @@ impl Accept<Result<Literal>> for Grouping {
     }
 }
 
+#[derive(Clone)]
 pub struct LiteralExpr {
     pub value: Literal,
 }
@@ -205,6 +232,7 @@ impl Accept<Result<Literal>> for LiteralExpr {
     }
 }
 
+#[derive(Clone)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
@@ -222,6 +250,7 @@ impl Accept<Result<Literal>> for Unary {
     }
 }
 
+#[derive(Clone)]
 pub struct Variable {
     pub name: Token,
 }
@@ -238,6 +267,7 @@ impl Accept<Result<Literal>> for Variable {
     }
 }
 
+#[derive(Clone)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
@@ -255,6 +285,7 @@ impl Accept<String> for Assign {
     }
 }
 
+#[derive(Clone)]
 pub struct Logical {
     pub left: Box<Expr>,
     pub operator: Token,
@@ -273,6 +304,7 @@ impl Accept<String> for Logical {
     }
 }
 
+#[derive(Clone)]
 pub struct Call {
     pub callee: Box<Expr>,
     pub paren: Token,
@@ -395,7 +427,7 @@ impl fmt::Display for RuntimeError {
 impl std::error::Error for RuntimeError {}
 
 pub struct Interpreter {
-    environment_context: EnvironmentContext,
+    pub environment_context: EnvironmentContext,
 }
 
 impl Interpreter {
@@ -406,7 +438,11 @@ impl Interpreter {
             env_context
                 .define(
                     func.0,
-                    Literal::Callable(Callable::new(func.2, func.1, func.0.to_string())),
+                    Literal::Callable(Callable::Native(NativeFunction::new(
+                        func.2,
+                        func.1,
+                        func.0.to_string(),
+                    ))),
                 )
                 .unwrap();
         }
@@ -452,6 +488,15 @@ impl Interpreter {
         }
         a == b
     }
+
+    pub fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
+        self.environment_context.begin_scope();
+        for statement in statements {
+            self.execute(statement)?;
+        }
+        self.environment_context.exit_scope()?;
+        Ok(())
+    }
 }
 
 impl StmtVisitor<Result<()>> for Interpreter {
@@ -477,11 +522,7 @@ impl StmtVisitor<Result<()>> for Interpreter {
     }
 
     fn visit_block_stmt(&mut self, stmt: &BlockStmt) -> Result<()> {
-        self.environment_context.begin_scope();
-        for statement in &stmt.statements {
-            self.execute(statement)?;
-        }
-        self.environment_context.exit_scope()?;
+        self.execute_block(&stmt.statements)?;
         Ok(())
     }
 
@@ -501,6 +542,13 @@ impl StmtVisitor<Result<()>> for Interpreter {
             self.execute(&stmt.body)?;
             while_condition = self.evaluate(&stmt.condition)?;
         }
+        Ok(())
+    }
+
+    fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Result<()> {
+        let function = Callable::UserDefined(UserFunction::new(stmt.clone()));
+        self.environment_context
+            .define(&stmt.name.lexeme, Literal::Callable(function))?;
         Ok(())
     }
 }
@@ -641,12 +689,12 @@ impl Visitor<Result<Literal>> for Interpreter {
 
         match callee {
             Literal::Callable(c) => {
-                if arguments.len() != c.arity {
+                if arguments.len() != c.arity() {
                     return Err(anyhow::anyhow!(RuntimeError {
                         token: call.paren.clone(),
                         message: format!(
                             "Expected {} arguments but got {}.",
-                            c.arity,
+                            c.arity(),
                             arguments.len()
                         ),
                     }));

@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::ast::{
-    Assign, Binary, BlockStmt, Call, ExpressionStmt, Grouping, IfStmt, LiteralExpr, Logical,
-    PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
+    Assign, Binary, BlockStmt, Call, ExpressionStmt, FunctionStmt, Grouping, IfStmt, LiteralExpr,
+    Logical, PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 };
 use crate::{
     ast::Expr,
@@ -107,10 +107,63 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Stmt> {
+        if self.match_tokens(vec![TokenType::Fun]) {
+            return self.function("function");
+        }
         if self.match_tokens(vec![TokenType::Var]) {
             return self.var_declaration();
         }
         self.statement()
+    }
+
+    fn function(&mut self, kind: &str) -> Result<Stmt> {
+        let name = self
+            .consume(
+                TokenType::Identifier,
+                format!("Expect {} name.", kind).as_str(),
+            )?
+            .clone();
+
+        self.consume(
+            TokenType::LeftParen,
+            format!("Expect '(' after {} name.", kind).as_str(),
+        )?;
+        let mut parameters: Vec<Token> = Vec::new();
+
+        if !self.check(TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 255 {
+                    let token = self.peek().clone();
+                    self.error(&token, "Cannot have more than 255 parameters.");
+                }
+
+                parameters.push(
+                    self.consume(TokenType::Identifier, "Expect parameter name.")?
+                        .clone(),
+                );
+
+                if !self.match_tokens(vec![TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
+        self.consume(
+            TokenType::LeftBrace,
+            format!("Expect '{{' before {} body.", kind).as_str(),
+        )?;
+        let body = match self.block()? {
+            Stmt::Block(block) => block,
+            _ => return Err(anyhow::anyhow!("Expected block statement.")),
+        };
+
+        Ok(Stmt::Function(FunctionStmt {
+            name,
+            params: parameters,
+            body: body.statements,
+            //body: Box::new(body),
+        }))
     }
 
     fn var_declaration(&mut self) -> Result<Stmt> {

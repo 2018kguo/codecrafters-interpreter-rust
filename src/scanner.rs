@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
-use crate::ast::Interpreter;
+use crate::ast::{FunctionStmt, Interpreter};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
@@ -122,15 +122,81 @@ impl Display for TokenType {
 pub type LoxFuncPtr = fn(&Interpreter, &Vec<Literal>) -> Result<Literal>;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Callable {
-    pub arity: usize,
-    pub func_ptr: LoxFuncPtr,
-    pub name: String,
+pub enum Callable {
+    UserDefined(UserFunction),
+    Native(NativeFunction),
 }
 
 impl Callable {
-    pub fn new(arity: usize, func_ptr: LoxFuncPtr, name: String) -> Callable {
-        Callable {
+    pub fn arity(&self) -> usize {
+        match self {
+            Callable::Native(native) => native.arity,
+            Callable::UserDefined(user) => user.func_declaration.params.len(),
+        }
+    }
+
+    pub fn call(&self, interpreter: &Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
+        match self {
+            Callable::Native(native) => native.call(interpreter, arguments),
+            Callable::UserDefined(user) => user.call(interpreter, arguments),
+        }
+    }
+
+    pub fn name(&self) -> String {
+        match self {
+            Callable::Native(native) => native.name.clone(),
+            Callable::UserDefined(user) => user.func_declaration.name.lexeme.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct UserFunction {
+    pub func_declaration: Box<FunctionStmt>,
+}
+
+impl PartialEq for UserFunction {
+    fn eq(&self, other: &Self) -> bool {
+        self.func_declaration.name.lexeme == other.func_declaration.name.lexeme
+    }
+}
+
+impl fmt::Debug for UserFunction {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "<fn {}>", self.func_declaration.name.lexeme)
+    }
+}
+
+impl UserFunction {
+    pub fn new(func_declaration: FunctionStmt) -> UserFunction {
+        UserFunction {
+            func_declaration: Box::new(func_declaration),
+        }
+    }
+
+    pub fn call(&self, _interpreter: &Interpreter, arguments: &[Literal]) -> Result<Literal> {
+        // TODO: create a method to copy the interpreter minus the environment later if needed
+        let mut new_interpreter = Interpreter::new();
+        for (index, param) in self.func_declaration.params.iter().enumerate() {
+            new_interpreter
+                .environment_context
+                .define(&param.lexeme, arguments[index].clone())?;
+        }
+        new_interpreter.execute_block(&self.func_declaration.body)?;
+        Ok(Literal::Nil)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NativeFunction {
+    pub name: String,
+    pub arity: usize,
+    pub func_ptr: LoxFuncPtr,
+}
+
+impl NativeFunction {
+    pub fn new(arity: usize, func_ptr: LoxFuncPtr, name: String) -> NativeFunction {
+        NativeFunction {
             arity,
             func_ptr,
             name,
@@ -163,7 +229,7 @@ impl fmt::Display for Literal {
             }
             Literal::String(s) => write!(f, "{}", s),
             Literal::Boolean(b) => write!(f, "{}", b),
-            Literal::Callable(c) => write!(f, "<callable {}>", c.name),
+            Literal::Callable(c) => write!(f, "<fn {}>", c.name()),
             Literal::Nil => write!(f, "nil"),
         }
     }
