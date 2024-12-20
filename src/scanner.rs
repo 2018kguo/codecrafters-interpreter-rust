@@ -3,8 +3,10 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
+use std::sync::{Arc, RwLock};
 
 use crate::ast::{FunctionStmt, Interpreter, ReturnError};
+use crate::environment::{Environment, EnvironmentContext};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
@@ -153,6 +155,7 @@ impl Callable {
 #[derive(Clone)]
 pub struct UserFunction {
     pub func_declaration: Box<FunctionStmt>,
+    pub closure: Arc<RwLock<EnvironmentContext>>,
 }
 
 impl PartialEq for UserFunction {
@@ -168,28 +171,33 @@ impl fmt::Debug for UserFunction {
 }
 
 impl UserFunction {
-    pub fn new(func_declaration: FunctionStmt) -> UserFunction {
+    pub fn new(
+        func_declaration: FunctionStmt,
+        closure: Arc<RwLock<EnvironmentContext>>,
+    ) -> UserFunction {
         UserFunction {
             func_declaration: Box::new(func_declaration),
+            closure,
         }
     }
 
     pub fn call(&self, _interpreter: &Interpreter, arguments: &[Literal]) -> Result<Literal> {
         // TODO: create a method to copy the interpreter minus the environment later if needed
-        let mut new_interpreter = Interpreter::new();
+        let cloned_environment = self.closure.read().unwrap().clone();
+        let mut new_interpreter = Interpreter::new_with_environment(cloned_environment);
         // add the globals from the current interpreter's environment to the new interpreter's
         // environment. This is needed for recursive functions because the function is defined at
         // the global scope
-        for (key, value) in _interpreter
-            .environment_context
-            .get_values_in_global_environment()
-            .iter()
-        {
-            new_interpreter
-                .environment_context
-                .define(key, value.clone())?;
-        }
-        new_interpreter.environment_context.begin_scope();
+        //for (key, value) in _interpreter
+        //    .environment_context
+        //    .get_values_in_global_environment()
+        //    .iter()
+        //{
+        //    new_interpreter
+        //        .environment_context
+        //        .define(key, value.clone())?;
+        //}
+        //new_interpreter.environment_context.begin_scope();
         // ok so we copied the global environment over, now we need to copy the arguments over into
         // the new environment
         for (index, param) in self.func_declaration.params.iter().enumerate() {
@@ -198,15 +206,13 @@ impl UserFunction {
                 .define(&param.lexeme, arguments[index].clone())?;
         }
         let result = new_interpreter.execute_block(&self.func_declaration.body);
-        new_interpreter.environment_context.exit_scope()?;
+
         match result {
             Ok(_) => Ok(Literal::Nil),
             Err(e) => {
-                if let Some(ReturnError::ReturnValue(return_val)) = e.downcast_ref::<ReturnError>()
-                {
-                    Ok(return_val.clone())
-                } else {
-                    Err(e)
+                match e.downcast::<ReturnError>() {
+                    Ok(ReturnError::ReturnValue(return_val)) => Ok(return_val),
+                    Err(e) => Err(e), // Not a ReturnError
                 }
             }
         }

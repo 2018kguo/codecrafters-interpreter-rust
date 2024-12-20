@@ -9,11 +9,13 @@ use crate::{
 
 // Interpreter owns environments, each environment owns a hashmap of variables
 //
+#[derive(Clone)]
 pub struct EnvironmentContext {
     environments: HashMap<usize, Environment>,
     pub current_environment: usize,
 }
 
+#[derive(Clone)]
 pub struct Environment {
     parent_environment: Option<usize>,
     values: HashMap<String, Literal>,
@@ -27,13 +29,6 @@ impl EnvironmentContext {
             environments,
             current_environment: 0,
         }
-    }
-
-    pub fn get_values_in_global_environment(&self) -> HashMap<String, Literal> {
-        self.environments
-            .get(&0)
-            .map(|env| env.values.clone())
-            .unwrap_or_default()
     }
 
     pub fn begin_scope(&mut self) {

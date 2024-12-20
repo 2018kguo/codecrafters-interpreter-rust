@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::{Arc, RwLock};
 
 use crate::native_funcs::NATIVE_FUNCS;
 use crate::scanner::UserFunction;
@@ -480,6 +481,12 @@ impl Interpreter {
         }
     }
 
+    pub fn new_with_environment(environment_context: EnvironmentContext) -> Self {
+        Interpreter {
+            environment_context,
+        }
+    }
+
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
         for statement in statements {
             self.execute(&statement)?;
@@ -574,9 +581,23 @@ impl StmtVisitor<Result<()>> for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Result<()> {
-        let function = Callable::UserDefined(UserFunction::new(stmt.clone()));
+        let cloned_environment = self.environment_context.clone();
+        // Create the environment in the Arc<RwLock>
+        let shared_env = Arc::new(RwLock::new(cloned_environment.clone()));
+
+        // Create function with shared environment
+        let function = Callable::UserDefined(UserFunction::new(stmt.clone(), shared_env.clone()));
+
+        // Define the function in the shared environment first (for recursion)
+        shared_env
+            .write()
+            .unwrap()
+            .define(&stmt.name.lexeme, Literal::Callable(function.clone()))?;
+
+        // Define in current environment
         self.environment_context
             .define(&stmt.name.lexeme, Literal::Callable(function))?;
+
         Ok(())
     }
 
