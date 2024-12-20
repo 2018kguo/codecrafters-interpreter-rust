@@ -11,7 +11,7 @@ use crate::{
 //
 pub struct EnvironmentContext {
     environments: HashMap<usize, Environment>,
-    current_environment: usize,
+    pub current_environment: usize,
 }
 
 pub struct Environment {
@@ -27,6 +27,13 @@ impl EnvironmentContext {
             environments,
             current_environment: 0,
         }
+    }
+
+    pub fn get_values_in_global_environment(&self) -> HashMap<String, Literal> {
+        self.environments
+            .get(&0)
+            .map(|env| env.values.clone())
+            .unwrap_or_default()
     }
 
     pub fn begin_scope(&mut self) {

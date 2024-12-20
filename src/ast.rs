@@ -8,6 +8,19 @@ use crate::{
 };
 use anyhow::Result;
 
+#[derive(Debug)]
+pub enum ReturnError {
+    ReturnValue(Literal),
+}
+
+impl fmt::Display for ReturnError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ReturnError")
+    }
+}
+
+impl std::error::Error for ReturnError {}
+
 pub trait Accept<T> {
     fn accept(&self, visitor: &mut dyn Visitor<T>) -> T;
 }
@@ -25,6 +38,7 @@ pub trait StmtVisitor<T> {
     fn visit_if_stmt(&mut self, stmt: &IfStmt) -> T;
     fn visit_while_stmt(&mut self, stmt: &WhileStmt) -> T;
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> T;
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> T;
 }
 
 #[derive(Clone)]
@@ -36,6 +50,7 @@ pub enum Stmt {
     If(IfStmt),
     While(WhileStmt),
     Function(FunctionStmt),
+    Return(ReturnStmt),
 }
 
 #[derive(Clone)]
@@ -79,6 +94,12 @@ pub struct FunctionStmt {
     pub body: Vec<Stmt>,
 }
 
+#[derive(Clone)]
+pub struct ReturnStmt {
+    pub keyword: Token,
+    pub value: Option<Expr>,
+}
+
 // technically this is supposed to return null but going to just use string as a placeholder
 impl StmtAccept<Result<()>> for Stmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
@@ -90,6 +111,7 @@ impl StmtAccept<Result<()>> for Stmt {
             Stmt::If(e) => e.accept(visitor),
             Stmt::While(e) => e.accept(visitor),
             Stmt::Function(e) => e.accept(visitor),
+            Stmt::Return(e) => e.accept(visitor),
         }
     }
 }
@@ -133,6 +155,12 @@ impl StmtAccept<Result<()>> for WhileStmt {
 impl StmtAccept<Result<()>> for FunctionStmt {
     fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
         visitor.visit_function_stmt(self)
+    }
+}
+
+impl StmtAccept<Result<()>> for ReturnStmt {
+    fn accept(&self, visitor: &mut dyn StmtVisitor<Result<()>>) -> Result<()> {
+        visitor.visit_return_stmt(self)
     }
 }
 
@@ -550,6 +578,14 @@ impl StmtVisitor<Result<()>> for Interpreter {
         self.environment_context
             .define(&stmt.name.lexeme, Literal::Callable(function))?;
         Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, stmt: &ReturnStmt) -> Result<()> {
+        let mut value = Literal::Nil;
+        if let Some(expr) = &stmt.value {
+            value = self.evaluate(expr)?;
+        }
+        Err(ReturnError::ReturnValue(value).into())
     }
 }
 

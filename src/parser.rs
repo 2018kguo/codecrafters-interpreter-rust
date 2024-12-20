@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::ast::{
     Assign, Binary, BlockStmt, Call, ExpressionStmt, FunctionStmt, Grouping, IfStmt, LiteralExpr,
-    Logical, PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
+    Logical, PrintStmt, ReturnStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 };
 use crate::{
     ast::Expr,
@@ -197,6 +197,9 @@ impl Parser {
         if self.match_tokens(vec![TokenType::Print]) {
             return self.print_statement();
         }
+        if self.match_tokens(vec![TokenType::Return]) {
+            return self.return_statement();
+        }
         if self.match_tokens(vec![TokenType::While]) {
             return self.while_statement();
         }
@@ -229,6 +232,16 @@ impl Parser {
         let value = self.expression()?;
         self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
         Ok(Stmt::Print(PrintStmt { expression: value }))
+    }
+
+    fn return_statement(&mut self) -> Result<Stmt> {
+        let keyword = self.previous().clone();
+        let mut value = None;
+        if !self.check(TokenType::Semicolon) {
+            value = Some(self.expression()?);
+        }
+        self.consume(TokenType::Semicolon, "Expect ';' after return value.")?;
+        Ok(Stmt::Return(ReturnStmt { keyword, value }))
     }
 
     fn while_statement(&mut self) -> Result<Stmt> {

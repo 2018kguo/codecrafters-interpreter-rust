@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
 
-use crate::ast::{FunctionStmt, Interpreter};
+use crate::ast::{FunctionStmt, Interpreter, ReturnError};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
@@ -177,13 +177,39 @@ impl UserFunction {
     pub fn call(&self, _interpreter: &Interpreter, arguments: &[Literal]) -> Result<Literal> {
         // TODO: create a method to copy the interpreter minus the environment later if needed
         let mut new_interpreter = Interpreter::new();
+        // add the globals from the current interpreter's environment to the new interpreter's
+        // environment. This is needed for recursive functions because the function is defined at
+        // the global scope
+        for (key, value) in _interpreter
+            .environment_context
+            .get_values_in_global_environment()
+            .iter()
+        {
+            new_interpreter
+                .environment_context
+                .define(key, value.clone())?;
+        }
+        new_interpreter.environment_context.begin_scope();
+        // ok so we copied the global environment over, now we need to copy the arguments over into
+        // the new environment
         for (index, param) in self.func_declaration.params.iter().enumerate() {
             new_interpreter
                 .environment_context
                 .define(&param.lexeme, arguments[index].clone())?;
         }
-        new_interpreter.execute_block(&self.func_declaration.body)?;
-        Ok(Literal::Nil)
+        let result = new_interpreter.execute_block(&self.func_declaration.body);
+        new_interpreter.environment_context.exit_scope()?;
+        match result {
+            Ok(_) => Ok(Literal::Nil),
+            Err(e) => {
+                if let Some(ReturnError::ReturnValue(return_val)) = e.downcast_ref::<ReturnError>()
+                {
+                    Ok(return_val.clone())
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 }
 
