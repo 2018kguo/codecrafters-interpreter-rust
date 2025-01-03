@@ -197,35 +197,23 @@ impl UserFunction {
     }
 
     pub fn call(&self, _interpreter: &Interpreter, arguments: &[Literal]) -> Result<Literal> {
-        // TODO: create a method to copy the interpreter minus the environment later if needed
-        //let cloned_environment = self.closure.read().unwrap().clone();
-        let current_environment_id = self
+        let current_environment_id_before_call = self
             .closure
             .environment_context
             .read()
             .unwrap()
             .current_environment;
+
+        // Need to pass in the environment id of the closure otherwise we'll just use the
+        // environment at the time of calling the function instead of at the time of defining it.
+        // Each environment is still mutable so we can't just clone environments when passing them into
+        // functions.
         let mut new_interpreter = Interpreter::new_with_environment_and_environment_id(
             self.closure.environment_context.clone(),
             self.closure.environment_id,
         );
-        // add the globals from the current interpreter's environment to the new interpreter's
-        // environment. This is needed for recursive functions because the function is defined at
-        // the global scope
-        //for (key, value) in _interpreter
-        //    .environment_context
-        //    .get_values_in_global_environment()
-        //    .iter()
-        //{
-        //    new_interpreter
-        //        .environment_context
-        //        .define(key, value.clone())?;
-        //}
-        //new_interpreter.environment_context.begin_scope();
-        // ok so we copied the global environment over, now we need to copy the arguments over into
-        // the new environment
 
-        // Create new scope for function arguments
+        // Now that we've entered the same environment as the closure, we create the new environment for the function args
         new_interpreter
             .environment_context
             .write()
@@ -247,11 +235,14 @@ impl UserFunction {
             .write()
             .unwrap()
             .exit_scope()?;
+
+        // need to mutate current_environment to what it was before we called the function instead
+        // since we mutated it to match the closure
         new_interpreter
             .environment_context
             .write()
             .unwrap()
-            .current_environment = current_environment_id;
+            .current_environment = current_environment_id_before_call;
 
         match result {
             Ok(_) => Ok(Literal::Nil),

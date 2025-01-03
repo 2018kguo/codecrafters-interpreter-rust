@@ -38,7 +38,7 @@ impl EnvironmentContext {
             parent_environment: Some(self.current_environment),
             values: HashMap::new(),
         };
-        let new_env_id = self.max_environment_id + 1; 
+        let new_env_id = self.max_environment_id + 1;
         self.environments.insert(new_env_id, new_environment);
         //println!("new env id: {}", new_env_id);
         //println!("parent env id: {}", self.current_environment);
