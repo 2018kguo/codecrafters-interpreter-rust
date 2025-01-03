@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::{Arc, RwLock};
 
 use crate::native_funcs::NATIVE_FUNCS;
-use crate::scanner::UserFunction;
+use crate::scanner::{Closure, UserFunction};
 use crate::{
     environment::EnvironmentContext,
     scanner::{Callable, Literal, NativeFunction, Token, TokenType},
@@ -166,7 +166,7 @@ impl StmtAccept<Result<()>> for ReturnStmt {
 }
 
 // EXPRESSIONS
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Expr {
     Binary(Binary),
     Grouping(Grouping),
@@ -208,7 +208,7 @@ impl Accept<Result<Literal>> for Expr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: Token,
@@ -227,7 +227,7 @@ impl Accept<Result<Literal>> for Binary {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
@@ -244,7 +244,7 @@ impl Accept<Result<Literal>> for Grouping {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LiteralExpr {
     pub value: Literal,
 }
@@ -261,7 +261,7 @@ impl Accept<Result<Literal>> for LiteralExpr {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Unary {
     pub operator: Token,
     pub right: Box<Expr>,
@@ -279,7 +279,7 @@ impl Accept<Result<Literal>> for Unary {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Variable {
     pub name: Token,
 }
@@ -296,7 +296,7 @@ impl Accept<Result<Literal>> for Variable {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Assign {
     pub name: Token,
     pub value: Box<Expr>,
@@ -314,7 +314,7 @@ impl Accept<String> for Assign {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Logical {
     pub left: Box<Expr>,
     pub operator: Token,
@@ -333,7 +333,7 @@ impl Accept<String> for Logical {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Call {
     pub callee: Box<Expr>,
     pub paren: Token,
@@ -456,7 +456,7 @@ impl fmt::Display for RuntimeError {
 impl std::error::Error for RuntimeError {}
 
 pub struct Interpreter {
-    pub environment_context: EnvironmentContext,
+    pub environment_context: Arc<RwLock<EnvironmentContext>>,
 }
 
 impl Interpreter {
@@ -477,14 +477,23 @@ impl Interpreter {
         }
 
         Interpreter {
-            environment_context: env_context,
+            environment_context: Arc::new(RwLock::new(env_context)),
         }
     }
 
-    pub fn new_with_environment(environment_context: EnvironmentContext) -> Self {
-        Interpreter {
+    pub fn new_with_environment_and_environment_id(
+        environment_context: Arc<RwLock<EnvironmentContext>>,
+        environment_id: usize,
+    ) -> Self {
+        let interpreter = Interpreter {
             environment_context,
-        }
+        };
+        interpreter
+            .environment_context
+            .write()
+            .unwrap()
+            .current_environment = environment_id;
+        interpreter
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
@@ -525,11 +534,11 @@ impl Interpreter {
     }
 
     pub fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
-        self.environment_context.begin_scope();
+        self.environment_context.write().unwrap().begin_scope();
         for statement in statements {
             self.execute(statement)?;
         }
-        self.environment_context.exit_scope()?;
+        self.environment_context.write().unwrap().exit_scope()?;
         Ok(())
     }
 }
@@ -552,7 +561,10 @@ impl StmtVisitor<Result<()>> for Interpreter {
             value = self.evaluate(expr)?;
         }
 
-        self.environment_context.define(&stmt.name.lexeme, value)?;
+        self.environment_context
+            .write()
+            .unwrap()
+            .define(&stmt.name.lexeme, value)?;
         Ok(())
     }
 
@@ -581,21 +593,23 @@ impl StmtVisitor<Result<()>> for Interpreter {
     }
 
     fn visit_function_stmt(&mut self, stmt: &FunctionStmt) -> Result<()> {
-        let cloned_environment = self.environment_context.clone();
+        //let cloned_environment = self.environment_context.clone();
         // Create the environment in the Arc<RwLock>
-        let shared_env = Arc::new(RwLock::new(cloned_environment.clone()));
+        //let shared_env = Arc::new(RwLock::new(cloned_environment.clone()));
 
         // Create function with shared environment
-        let function = Callable::UserDefined(UserFunction::new(stmt.clone(), shared_env.clone()));
-
-        // Define the function in the shared environment first (for recursion)
-        shared_env
-            .write()
-            .unwrap()
-            .define(&stmt.name.lexeme, Literal::Callable(function.clone()))?;
+        let function = Callable::UserDefined(UserFunction::new(
+            stmt.clone(),
+            Closure::new(
+                self.environment_context.clone(),
+                self.environment_context.read().unwrap().current_environment,
+            ),
+        ));
 
         // Define in current environment
         self.environment_context
+            .write()
+            .unwrap()
             .define(&stmt.name.lexeme, Literal::Callable(function))?;
 
         Ok(())
@@ -712,12 +726,15 @@ impl Visitor<Result<Literal>> for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, variable: &Variable) -> Result<Literal> {
-        self.environment_context.get(&variable.name)
+        //self.environment_context.read().unwrap().debug_print();
+        self.environment_context.read().unwrap().get(&variable.name)
     }
 
     fn visit_assign(&mut self, assign: &Assign) -> Result<Literal> {
         let value = self.evaluate(&assign.value)?;
         self.environment_context
+            .write()
+            .unwrap()
             .assign(&assign.name, value.clone())?;
         Ok(value)
     }

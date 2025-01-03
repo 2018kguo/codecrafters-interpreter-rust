@@ -13,6 +13,7 @@ use crate::{
 pub struct EnvironmentContext {
     environments: HashMap<usize, Environment>,
     pub current_environment: usize,
+    pub max_environment_id: usize,
 }
 
 #[derive(Clone)]
@@ -28,6 +29,7 @@ impl EnvironmentContext {
         EnvironmentContext {
             environments,
             current_environment: 0,
+            max_environment_id: 0,
         }
     }
 
@@ -36,9 +38,12 @@ impl EnvironmentContext {
             parent_environment: Some(self.current_environment),
             values: HashMap::new(),
         };
-        let new_env_id = self.environments.len();
+        let new_env_id = self.max_environment_id + 1; 
         self.environments.insert(new_env_id, new_environment);
+        //println!("new env id: {}", new_env_id);
+        //println!("parent env id: {}", self.current_environment);
         self.current_environment = new_env_id;
+        self.max_environment_id = new_env_id;
     }
 
     pub fn exit_scope(&mut self) -> Result<()> {
@@ -46,9 +51,9 @@ impl EnvironmentContext {
             let parent_env_id = current_env
                 .parent_environment
                 .ok_or_else(|| anyhow::anyhow!("Attempted to exit global scope"))?;
-            let removed_environment = self.current_environment;
+            //let removed_environment = self.current_environment;
             self.current_environment = parent_env_id;
-            self.environments.remove(&removed_environment);
+            //self.environments.remove(&removed_environment);
             Ok(())
         } else {
             Err(anyhow::anyhow!("Current environment not found"))
@@ -86,6 +91,10 @@ impl EnvironmentContext {
         let mut environment = Some(self.current_environment);
         while let Some(env_id) = environment {
             if let Some(env) = self.environments.get(&env_id) {
+                //println!("name: {:?}", name.lexeme);
+                //println!("env values: {:?}", env.values);
+                //println!("environment: {:?}", environment);
+                //println!("parent: {:?}", env.parent_environment);
                 if let Some(value) = env.values.get(name.lexeme.as_str()) {
                     return Ok(value.clone());
                 }
@@ -98,6 +107,19 @@ impl EnvironmentContext {
             token: name.clone(),
             message: format!("Undefined variable '{}'.", name.lexeme),
         }))
+    }
+
+    pub fn debug_print(&self) {
+        println!("--- Environment Context ---");
+        println!("current environment: {}", self.current_environment);
+        for (env_id, env) in self.environments.iter() {
+            println!("Environment {}", env_id);
+            println!("Parent: {:?}", env.parent_environment);
+            for (name, value) in env.values.iter() {
+                println!("{}: {:?}", name, value);
+            }
+        }
+        println!("--- End Environment Context ---");
     }
 }
 
