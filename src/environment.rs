@@ -9,14 +9,12 @@ use crate::{
 
 // Interpreter owns environments, each environment owns a hashmap of variables
 //
-#[derive(Clone)]
 pub struct EnvironmentContext {
     environments: HashMap<usize, Environment>,
     pub current_environment: usize,
     pub max_environment_id: usize,
 }
 
-#[derive(Clone)]
 pub struct Environment {
     parent_environment: Option<usize>,
     values: HashMap<String, Literal>,

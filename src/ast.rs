@@ -1,5 +1,4 @@
 use std::fmt;
-use std::sync::{Arc, RwLock};
 
 use crate::native_funcs::NATIVE_FUNCS;
 use crate::scanner::{Closure, UserFunction};
@@ -456,7 +455,7 @@ impl fmt::Display for RuntimeError {
 impl std::error::Error for RuntimeError {}
 
 pub struct Interpreter {
-    pub environment_context: Arc<RwLock<EnvironmentContext>>,
+    pub environment_context: EnvironmentContext,
 }
 
 impl Interpreter {
@@ -477,23 +476,8 @@ impl Interpreter {
         }
 
         Interpreter {
-            environment_context: Arc::new(RwLock::new(env_context)),
+            environment_context: env_context,
         }
-    }
-
-    pub fn new_with_environment_and_environment_id(
-        environment_context: Arc<RwLock<EnvironmentContext>>,
-        environment_id: usize,
-    ) -> Self {
-        let interpreter = Interpreter {
-            environment_context,
-        };
-        interpreter
-            .environment_context
-            .write()
-            .unwrap()
-            .current_environment = environment_id;
-        interpreter
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<()> {
@@ -534,11 +518,11 @@ impl Interpreter {
     }
 
     pub fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<()> {
-        self.environment_context.write().unwrap().begin_scope();
+        self.environment_context.begin_scope();
         for statement in statements {
             self.execute(statement)?;
         }
-        self.environment_context.write().unwrap().exit_scope()?;
+        self.environment_context.exit_scope()?;
         Ok(())
     }
 }
@@ -561,10 +545,7 @@ impl StmtVisitor<Result<()>> for Interpreter {
             value = self.evaluate(expr)?;
         }
 
-        self.environment_context
-            .write()
-            .unwrap()
-            .define(&stmt.name.lexeme, value)?;
+        self.environment_context.define(&stmt.name.lexeme, value)?;
         Ok(())
     }
 
@@ -600,16 +581,11 @@ impl StmtVisitor<Result<()>> for Interpreter {
         // Create function with shared environment
         let function = Callable::UserDefined(UserFunction::new(
             stmt.clone(),
-            Closure::new(
-                self.environment_context.clone(),
-                self.environment_context.read().unwrap().current_environment,
-            ),
+            Closure::new(self.environment_context.current_environment),
         ));
 
         // Define in current environment
         self.environment_context
-            .write()
-            .unwrap()
             .define(&stmt.name.lexeme, Literal::Callable(function))?;
 
         Ok(())
@@ -727,14 +703,12 @@ impl Visitor<Result<Literal>> for Interpreter {
 
     fn visit_variable_expr(&mut self, variable: &Variable) -> Result<Literal> {
         //self.environment_context.read().unwrap().debug_print();
-        self.environment_context.read().unwrap().get(&variable.name)
+        self.environment_context.get(&variable.name)
     }
 
     fn visit_assign(&mut self, assign: &Assign) -> Result<Literal> {
         let value = self.evaluate(&assign.value)?;
         self.environment_context
-            .write()
-            .unwrap()
             .assign(&assign.name, value.clone())?;
         Ok(value)
     }

@@ -3,10 +3,8 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::{self, Display, Formatter};
-use std::sync::{Arc, RwLock};
 
 use crate::ast::{FunctionStmt, Interpreter, ReturnError};
-use crate::environment::{Environment, EnvironmentContext};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TokenType {
@@ -137,7 +135,7 @@ impl Callable {
         }
     }
 
-    pub fn call(&self, interpreter: &Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
+    pub fn call(&self, interpreter: &mut Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
         match self {
             Callable::Native(native) => native.call(interpreter, arguments),
             Callable::UserDefined(user) => user.call(interpreter, arguments),
@@ -172,19 +170,12 @@ impl fmt::Debug for UserFunction {
 
 #[derive(Clone)]
 pub struct Closure {
-    environment_context: Arc<RwLock<EnvironmentContext>>,
     environment_id: usize,
 }
 
 impl Closure {
-    pub fn new(
-        environment_context: Arc<RwLock<EnvironmentContext>>,
-        environment_id: usize,
-    ) -> Closure {
-        Closure {
-            environment_context,
-            environment_id,
-        }
+    pub fn new(environment_id: usize) -> Closure {
+        Closure { environment_id }
     }
 }
 
@@ -196,53 +187,34 @@ impl UserFunction {
         }
     }
 
-    pub fn call(&self, _interpreter: &Interpreter, arguments: &[Literal]) -> Result<Literal> {
-        let current_environment_id_before_call = self
-            .closure
-            .environment_context
-            .read()
-            .unwrap()
-            .current_environment;
+    pub fn call(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal> {
+        let current_environment_id_before_call =
+            interpreter.environment_context.current_environment;
 
         // Need to pass in the environment id of the closure otherwise we'll just use the
         // environment at the time of calling the function instead of at the time of defining it.
         // Each environment is still mutable so we can't just clone environments when passing them into
         // functions.
-        let mut new_interpreter = Interpreter::new_with_environment_and_environment_id(
-            self.closure.environment_context.clone(),
-            self.closure.environment_id,
-        );
+        let new_interpreter = interpreter;
+        new_interpreter.environment_context.current_environment = self.closure.environment_id;
 
         // Now that we've entered the same environment as the closure, we create the new environment for the function args
-        new_interpreter
-            .environment_context
-            .write()
-            .unwrap()
-            .begin_scope();
+        new_interpreter.environment_context.begin_scope();
 
         for (index, param) in self.func_declaration.params.iter().enumerate() {
             new_interpreter
                 .environment_context
-                .write()
-                .unwrap()
                 .define(&param.lexeme, arguments[index].clone())?;
         }
 
         let result = new_interpreter.execute_block(&self.func_declaration.body);
 
-        new_interpreter
-            .environment_context
-            .write()
-            .unwrap()
-            .exit_scope()?;
+        new_interpreter.environment_context.exit_scope()?;
 
         // need to mutate current_environment to what it was before we called the function instead
         // since we mutated it to match the closure
-        new_interpreter
-            .environment_context
-            .write()
-            .unwrap()
-            .current_environment = current_environment_id_before_call;
+        new_interpreter.environment_context.current_environment =
+            current_environment_id_before_call;
 
         match result {
             Ok(_) => Ok(Literal::Nil),
@@ -272,7 +244,7 @@ impl NativeFunction {
         }
     }
 
-    pub fn call(&self, interpreter: &Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
+    pub fn call(&self, interpreter: &mut Interpreter, arguments: &Vec<Literal>) -> Result<Literal> {
         (self.func_ptr)(interpreter, arguments)
     }
 }
